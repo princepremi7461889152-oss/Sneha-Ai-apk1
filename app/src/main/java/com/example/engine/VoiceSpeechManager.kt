@@ -1,0 +1,503 @@
+package com.example.engine
+
+import android.Manifest
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.media.AudioManager
+import android.media.ToneGenerator
+import android.os.Bundle
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
+import android.util.Log
+import androidx.core.content.ContextCompat
+import com.example.data.local.VoicePreferences
+import com.example.data.model.VoicePersona
+import com.example.data.model.VoiceState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import java.util.Locale
+
+class VoiceSpeechManager(private val context: Context) : TextToSpeech.OnInitListener {
+
+    private val tag = "VoiceSpeechManager"
+    private val scope = CoroutineScope(Dispatchers.Main)
+
+    private var speechRecognizer: SpeechRecognizer? = null
+    private var textToSpeech: TextToSpeech? = null
+    private var isTtsReady = false
+    private val pendingSpeechQueue = mutableListOf<String>()
+
+    private val _voiceState = MutableStateFlow(VoiceState.IDLE)
+    val voiceState: StateFlow<VoiceState> = _voiceState.asStateFlow()
+
+    private val _audioAmplitude = MutableStateFlow(0f)
+    val audioAmplitude: StateFlow<Float> = _audioAmplitude.asStateFlow()
+
+    private val _spokenTextLive = MutableStateFlow("")
+    val spokenTextLive: StateFlow<String> = _spokenTextLive.asStateFlow()
+
+    private val _isContinuousListening = MutableStateFlow(true)
+    val isContinuousListening: StateFlow<Boolean> = _isContinuousListening.asStateFlow()
+
+    var onSpeechRecognized: ((String) -> Unit)? = null
+    var onSpeechError: ((String) -> Unit)? = null
+    var onWakeWordDetected: (() -> Unit)? = null
+
+    var isVoiceOutputEnabled: Boolean = VoicePreferences.isVoiceOutputEnabled(context)
+    var speechRate: Float = VoicePreferences.getSpeechRate(context)
+    var speechPitch: Float = VoicePreferences.getSpeechPitch(context)
+    var currentPersona: VoicePersona = VoicePreferences.getPersona(context)
+
+    private var restartListeningJob: Job? = null
+    private var toneGenerator: ToneGenerator? = null
+
+    init {
+        try {
+            toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80)
+        } catch (ignored: Exception) {}
+
+        try {
+            textToSpeech = TextToSpeech(context.applicationContext, this)
+        } catch (e: Exception) {
+            Log.e(tag, "Failed to initialize TTS", e)
+        }
+    }
+
+    override fun onInit(status: Int) {
+        if (status == TextToSpeech.SUCCESS) {
+            isTtsReady = true
+
+            // Try Hindi (India), fallback to English (India), US, or default locale
+            val hindi = Locale("hi", "IN")
+            val result = textToSpeech?.setLanguage(hindi)
+            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                val englishIn = Locale("en", "IN")
+                val resEn = textToSpeech?.setLanguage(englishIn)
+                if (resEn == TextToSpeech.LANG_MISSING_DATA || resEn == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    textToSpeech?.setLanguage(Locale.getDefault())
+                }
+            }
+            textToSpeech?.setSpeechRate(speechRate)
+            textToSpeech?.setPitch(speechPitch)
+
+            textToSpeech?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) {
+                    _voiceState.value = VoiceState.SPEAKING
+                }
+
+                override fun onDone(utteranceId: String?) {
+                    _voiceState.value = VoiceState.IDLE
+                    _audioAmplitude.value = 0f
+                    // If continuous mode is on, resume listening automatically
+                    scheduleContinuousListenResume()
+                }
+
+                override fun onError(utteranceId: String?) {
+                    _voiceState.value = VoiceState.IDLE
+                    _audioAmplitude.value = 0f
+                    scheduleContinuousListenResume()
+                }
+            })
+
+            // Flush pending speech
+            synchronized(pendingSpeechQueue) {
+                while (pendingSpeechQueue.isNotEmpty()) {
+                    val queued = pendingSpeechQueue.removeAt(0)
+                    speak(queued)
+                }
+            }
+        } else {
+            Log.e(tag, "TTS init failed with status: $status")
+        }
+    }
+
+    private var isRecognizerBusy = false
+
+    fun playWakeBeep() {
+        try {
+            toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 120)
+        } catch (ignored: Exception) {}
+    }
+
+    @Synchronized
+    private fun getOrCreateRecognizer(): SpeechRecognizer? {
+        if (speechRecognizer != null) return speechRecognizer
+
+        if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+            Log.w(tag, "Speech recognition is not available on this device")
+            return null
+        }
+
+        return try {
+            SpeechRecognizer.createSpeechRecognizer(context.applicationContext).also { recognizer ->
+                speechRecognizer = recognizer
+                recognizer.setRecognitionListener(createRecognitionListener())
+            }
+        } catch (e: Exception) {
+            Log.e(tag, "Failed to create SpeechRecognizer", e)
+            null
+        }
+    }
+
+    private fun recreateRecognizer() {
+        try {
+            speechRecognizer?.cancel()
+            speechRecognizer?.destroy()
+        } catch (ignored: Exception) {}
+        speechRecognizer = null
+        isRecognizerBusy = false
+    }
+
+    private fun createRecognitionListener(): RecognitionListener {
+        return object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) {
+                _voiceState.value = VoiceState.LISTENING
+                _spokenTextLive.value = ""
+                isRecognizerBusy = true
+            }
+
+            override fun onBeginningOfSpeech() {
+                _voiceState.value = VoiceState.LISTENING
+            }
+
+            override fun onRmsChanged(rmsdB: Float) {
+                val normalized = ((rmsdB + 2f) / 12f).coerceIn(0f, 1f)
+                _audioAmplitude.value = normalized
+            }
+
+            override fun onBufferReceived(buffer: ByteArray?) {}
+
+            override fun onEndOfSpeech() {
+                _voiceState.value = VoiceState.THINKING
+                _audioAmplitude.value = 0f
+            }
+
+            override fun onError(error: Int) {
+                _voiceState.value = VoiceState.IDLE
+                _audioAmplitude.value = 0f
+                isRecognizerBusy = false
+
+                // Error Code 5 = ERROR_CLIENT (Client state conflict or rapid re-initialization)
+                // Error Code 11 = ERROR_SERVER_DISCONNECTED (API 31+ background Google Speech Service disconnect)
+                // Both are transient background lifecycle states that must be gracefully recovered without scaring the user.
+                when (error) {
+                    SpeechRecognizer.ERROR_NO_MATCH,
+                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
+                        // User paused speaking or silence detected - silent continuous resume
+                        if (_isContinuousListening.value) {
+                            scheduleContinuousListenResume(600L)
+                        }
+                    }
+                    SpeechRecognizer.ERROR_CLIENT -> { // Code 5
+                        Log.w(tag, "Handled SpeechRecognizer ERROR_CLIENT (Code 5): Re-syncing recognizer client safely.")
+                        recreateRecognizer()
+                        if (_isContinuousListening.value) {
+                            scheduleContinuousListenResume(1000L)
+                        }
+                    }
+                    11, // SpeechRecognizer.ERROR_SERVER_DISCONNECTED
+                    SpeechRecognizer.ERROR_SERVER -> { // Server disconnect (Code 11 / Code 3)
+                        Log.w(tag, "Handled SpeechRecognizer ERROR_SERVER_DISCONNECTED (Code $error): Reconnecting speech service.")
+                        recreateRecognizer()
+                        if (_isContinuousListening.value) {
+                            scheduleContinuousListenResume(1200L)
+                        }
+                    }
+                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> { // Code 8
+                        try {
+                            speechRecognizer?.cancel()
+                        } catch (ignored: Exception) {}
+                        isRecognizerBusy = false
+                        if (_isContinuousListening.value) {
+                            scheduleContinuousListenResume(1000L)
+                        }
+                    }
+                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> { // Code 9
+                        onSpeechError?.invoke("माइक की अनुमति (Microphone Permission) आवश्यक है। कृपया सेटिंग्स से अनुमति दें।")
+                    }
+                    SpeechRecognizer.ERROR_AUDIO -> { // Code 3
+                        recreateRecognizer()
+                        if (!_isContinuousListening.value) {
+                            onSpeechError?.invoke("ऑडियो रिकॉर्डर पुनः कनेक्ट हो रहा है...")
+                        }
+                        if (_isContinuousListening.value) {
+                            scheduleContinuousListenResume(1500L)
+                        }
+                    }
+                    SpeechRecognizer.ERROR_NETWORK,
+                    SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> {
+                        if (!_isContinuousListening.value) {
+                            onSpeechError?.invoke("इंटरनेट या वॉयस सर्विस कनेक्शन जांचें।")
+                        } else {
+                            scheduleContinuousListenResume(2500L)
+                        }
+                    }
+                    else -> {
+                        Log.w(tag, "Speech recognition non-fatal event code: $error")
+                        if (_isContinuousListening.value) {
+                            scheduleContinuousListenResume(1000L)
+                        }
+                    }
+                }
+            }
+
+            override fun onResults(results: Bundle?) {
+                _voiceState.value = VoiceState.IDLE
+                _audioAmplitude.value = 0f
+                isRecognizerBusy = false
+
+                val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                val text = matches?.firstOrNull()?.trim() ?: ""
+                _spokenTextLive.value = text
+
+                if (text.isNotBlank()) {
+                    handleRecognizedText(text)
+                } else if (_isContinuousListening.value) {
+                    scheduleContinuousListenResume(700L)
+                }
+            }
+
+            override fun onPartialResults(partialResults: Bundle?) {
+                val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                val text = matches?.firstOrNull() ?: ""
+                _spokenTextLive.value = text
+            }
+
+            override fun onEvent(eventType: Int, params: Bundle?) {}
+        }
+    }
+
+    fun startListening() {
+        restartListeningJob?.cancel()
+        if (isSpeaking()) {
+            stopSpeaking()
+        }
+
+        // Check RECORD_AUDIO permission safely
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            onSpeechError?.invoke("माइक्रोफ़ोन की अनुमति नहीं है।")
+            return
+        }
+
+        val recognizer = getOrCreateRecognizer()
+        if (recognizer == null) {
+            onSpeechError?.invoke("डिवाइस में वॉयस पहचान उपलब्ध नहीं है।")
+            return
+        }
+
+        // Cancel previous active recognition session safely if still busy
+        try {
+            recognizer.cancel()
+        } catch (ignored: Exception) {}
+
+        val customWake = VoicePreferences.getCustomWakeWord(context)
+        val promptText = if (customWake.equals("स्नेता", ignoreCase = true) || customWake.equals("स्नेहा", ignoreCase = true)) {
+            "स्नेहा सुन रही है, बोलिए मास्टर..."
+        } else {
+            "$customWake सुन रही है, बोलिए मास्टर..."
+        }
+
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "hi-IN")
+            putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf("hi-IN", "en-IN", "en-US"))
+            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_PROMPT, promptText)
+        }
+
+        try {
+            recognizer.startListening(intent)
+            isRecognizerBusy = true
+        } catch (e: Exception) {
+            _voiceState.value = VoiceState.IDLE
+            isRecognizerBusy = false
+            Log.w(tag, "SpeechRecognizer startListening failed: ${e.message}")
+            recreateRecognizer()
+            if (_isContinuousListening.value) {
+                scheduleContinuousListenResume(1200L)
+            }
+        }
+    }
+
+    private fun handleRecognizedText(text: String) {
+        val lower = text.lowercase().trim()
+        val customWake = VoicePreferences.getCustomWakeWord(context).lowercase().trim()
+
+        val defaultWakeList = listOf(
+            "स्नेहा", "sneha", "hey sneha", "हे स्नेहा", "सुनो स्नेहा",
+            "सुनो", "hello sneha", "hi sneha", "ok sneha", "siri", "alexa"
+        )
+
+        val customWakeList = if (customWake.isNotBlank() && customWake != "स्नेहा" && customWake != "sneha") {
+            listOf(
+                customWake,
+                "hey $customWake",
+                "हे $customWake",
+                "सुनो $customWake",
+                "hello $customWake",
+                "hi $customWake",
+                "ok $customWake"
+            )
+        } else {
+            emptyList()
+        }
+
+        val isJustCalling = defaultWakeList.contains(lower) ||
+                customWakeList.contains(lower) ||
+                (customWake.isNotBlank() && lower == customWake)
+
+        if (isJustCalling) {
+            playWakeBeep()
+            onWakeWordDetected?.invoke()
+            val greetingName = if (customWake.isNotBlank() && customWake != "स्नेहा") customWake else "स्नेहा"
+            speak("जी मास्टर! मैं हाजिर हूँ, आज्ञा दीजिए!")
+            // Wait for speech to finish then listen for follow-up command
+            scope.launch {
+                delay(2200)
+                startListening()
+            }
+        } else {
+            // Full command recognized
+            onSpeechRecognized?.invoke(text)
+        }
+    }
+
+    private fun scheduleContinuousListenResume(delayMs: Long = 1200L) {
+        if (!_isContinuousListening.value) return
+        restartListeningJob?.cancel()
+        restartListeningJob = scope.launch {
+            delay(delayMs)
+            if (_voiceState.value == VoiceState.IDLE && !isSpeaking()) {
+                startListening()
+            }
+        }
+    }
+
+    fun isSpeaking(): Boolean {
+        return textToSpeech?.isSpeaking == true || _voiceState.value == VoiceState.SPEAKING
+    }
+
+    fun setContinuousListening(enabled: Boolean) {
+        _isContinuousListening.value = enabled
+        if (!enabled) {
+            restartListeningJob?.cancel()
+            stopListening()
+        } else {
+            if (_voiceState.value == VoiceState.IDLE) {
+                startListening()
+            }
+        }
+    }
+
+    fun stopListening() {
+        restartListeningJob?.cancel()
+        try {
+            speechRecognizer?.stopListening()
+            _voiceState.value = VoiceState.IDLE
+            _audioAmplitude.value = 0f
+        } catch (ignored: Exception) {}
+    }
+
+    fun speak(text: String) {
+        if (!isVoiceOutputEnabled) return
+
+        val cleanText = text
+            .replace("*", "")
+            .replace("#", "")
+            .replace("`", "")
+            .trim()
+
+        if (cleanText.isBlank()) return
+
+        if (!isTtsReady || textToSpeech == null) {
+            synchronized(pendingSpeechQueue) {
+                pendingSpeechQueue.add(cleanText)
+            }
+            return
+        }
+
+        stopSpeaking()
+        restartListeningJob?.cancel()
+
+        _voiceState.value = VoiceState.SPEAKING
+        textToSpeech?.setSpeechRate(speechRate)
+        textToSpeech?.setPitch(speechPitch)
+
+        val utteranceId = "sneha_${System.currentTimeMillis()}"
+        textToSpeech?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+    }
+
+    fun applyPersona(persona: VoicePersona, applyPresetValues: Boolean = true) {
+        currentPersona = persona
+        VoicePreferences.savePersona(context, persona)
+        if (applyPresetValues) {
+            speechRate = persona.defaultSpeed
+            speechPitch = persona.defaultPitch
+            VoicePreferences.saveSpeechRate(context, speechRate)
+            VoicePreferences.saveSpeechPitch(context, speechPitch)
+            BackgroundSpeaker.speechRate = speechRate
+            BackgroundSpeaker.speechPitch = speechPitch
+        }
+        textToSpeech?.setSpeechRate(speechRate)
+        textToSpeech?.setPitch(speechPitch)
+    }
+
+    fun setSpeechRateValue(rate: Float) {
+        speechRate = rate
+        VoicePreferences.saveSpeechRate(context, rate)
+        BackgroundSpeaker.speechRate = rate
+        textToSpeech?.setSpeechRate(rate)
+    }
+
+    fun setSpeechPitchValue(pitch: Float) {
+        speechPitch = pitch
+        VoicePreferences.saveSpeechPitch(context, pitch)
+        BackgroundSpeaker.speechPitch = pitch
+        textToSpeech?.setPitch(pitch)
+    }
+
+    fun setVoiceOutput(enabled: Boolean) {
+        isVoiceOutputEnabled = enabled
+        VoicePreferences.saveVoiceOutputEnabled(context, enabled)
+        if (!enabled) {
+            stopSpeaking()
+        }
+    }
+
+    fun resetToCurrentPersonaDefaults() {
+        applyPersona(currentPersona, applyPresetValues = true)
+    }
+
+    fun stopSpeaking() {
+        try {
+            if (textToSpeech?.isSpeaking == true) {
+                textToSpeech?.stop()
+            }
+            if (_voiceState.value == VoiceState.SPEAKING) {
+                _voiceState.value = VoiceState.IDLE
+            }
+        } catch (ignored: Exception) {}
+    }
+
+    fun destroy() {
+        restartListeningJob?.cancel()
+        try {
+            toneGenerator?.release()
+            speechRecognizer?.destroy()
+            textToSpeech?.stop()
+            textToSpeech?.shutdown()
+        } catch (ignored: Exception) {}
+    }
+}

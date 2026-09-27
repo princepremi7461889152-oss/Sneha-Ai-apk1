@@ -1,0 +1,430 @@
+package com.example.engine
+
+import android.app.Activity
+import android.content.Context
+import com.example.data.local.SecurityUnlockPreferences
+import com.example.data.local.VoicePreferences
+import com.example.data.model.SnehaAction
+import com.example.data.model.VoicePersona
+import com.example.data.model.VoicePersonaId
+import com.example.data.remote.GeminiApiClient
+
+data class CommandResult(
+    val spokenResponse: String,
+    val actionTaken: SnehaAction? = null,
+    val isOtpRefusal: Boolean = false
+)
+
+object SnehaCommandEngine {
+
+    suspend fun processCommand(
+        context: Context,
+        activity: Activity?,
+        rawInput: String,
+        onReadMessagesRequest: (suspend () -> String)? = null
+    ): CommandResult {
+        val input = rawInput.trim()
+        val lower = input.lowercase()
+
+        // 1. Calling by name / Wake words ("स्नेहा", "hey sneha", "सुनो स्नेहा", "siri")
+        val isJustCalling = lower == "स्नेहा" || lower == "sneha" || lower == "hey sneha" ||
+                lower == "हे स्नेहा" || lower == "सुनो स्नेहा" || lower == "सुनो" ||
+                lower == "hello sneha" || lower == "hi sneha" || lower == "ok sneha" || lower == "siri"
+        if (isJustCalling) {
+            return CommandResult(
+                spokenResponse = "जी मास्टर! मैं हाजिर हूँ, आज्ञा दीजिए! मैं आपके लिए क्या करूँ?",
+                actionTaken = SnehaAction.ConversationalAnswer("जी मास्टर! मैं हाजिर हूँ, आज्ञा दीजिए!")
+            )
+        }
+
+        // 2. Strict Security Guard: Direct request for private OTP
+        if ((lower.contains("otp") || lower.contains("ओटीपी") || lower.contains("पासवर्ड") || lower.contains("password")) &&
+            (lower.contains("पढ़ो") || lower.contains("पढ़ो") || lower.contains("read") || lower.contains("बताओ") || lower.contains("tell") || lower.contains("क्या है"))
+        ) {
+            return CommandResult(
+                spokenResponse = "माफ़ कीजिये मास्टर, सुरक्षा कारणों से मैं कोई भी गोपनीय बैंक OTP या पासवर्ड जोर से नहीं पढ़ सकती।",
+                isOtpRefusal = true
+            )
+        }
+
+        // 3. Voice Call Pick & Auto-Speak (e.g. "कॉल पिक करके बोलो कि मैं क्लास में हूँ", "call pic karke bolo ki mai class me hu")
+        val isCallPickCommand = (lower.contains("call") || lower.contains("कॉल") || lower.contains("फोन")) &&
+                (lower.contains("pick") || lower.contains("पिक") || lower.contains("उठा") || lower.contains("रिसीव") || lower.contains("receive") || lower.contains("attend"))
+
+        if (isCallPickCommand) {
+            var messageToCaller: String? = null
+            val boloKeywords = listOf("बोलो कि", "बोलो", "बोल दो", "bolo ki", "bolo", "bol do", "say that", "say")
+            for (kw in boloKeywords) {
+                val idx = lower.indexOf(kw)
+                if (idx != -1) {
+                    messageToCaller = input.substring(idx + kw.length).trim()
+                    break
+                }
+            }
+
+            if (messageToCaller.isNullOrBlank()) {
+                messageToCaller = "मास्टर अभी क्लास में हैं, कृपया बाद में कॉल करें।"
+            }
+
+            val (success, summary) = CallAssistantManager.pickCallAndSpeak(context, messageToCaller) {}
+
+            return CommandResult(
+                spokenResponse = summary,
+                actionTaken = SnehaAction.PickCallAndSpeak(messageToCaller)
+            )
+        }
+
+        // Cut / Reject Call Command ("कॉल काटो", "cut call", "कॉल रिजेक्ट करो", "reject call", "disconnect")
+        val isCallCutCommand = (lower.contains("call") || lower.contains("कॉल") || lower.contains("फोन")) &&
+                (lower.contains("काट") || lower.contains("cut") || lower.contains("reject") || lower.contains("रिजेक्ट") || lower.contains("disconnect"))
+        if (isCallCutCommand) {
+            val cutMsg = CallAssistantManager.endOrRejectCall(context)
+            return CommandResult(
+                spokenResponse = cutMsg,
+                actionTaken = SnehaAction.RejectCall
+            )
+        }
+
+        // 3a. AI Truecaller / Spam Blocker Command
+        if (lower.contains("स्पैम") || lower.contains("spam") || lower.contains("truecaller") || lower.contains("ट्रूकॉलर")) {
+            return CommandResult(
+                spokenResponse = "जी मास्टर! AI स्पैम कॉलर गार्ड सक्रिय है। ज्ञात स्पैम और फ्रॉड नंबर खुद ब्लॉक हो रहे हैं।",
+                actionTaken = SnehaAction.OpenSpamBlocker
+            )
+        }
+
+        // Custom Wake-Word Command ("वेक वर्ड बदलो", "अपना नाम जार्विस रखो", etc.)
+        if (lower.contains("वेक वर्ड") || lower.contains("wake word") || (lower.contains("अपना नाम") && (lower.contains("रखो") || lower.contains("बदलो")))) {
+            var newName = ""
+            val prefixes = listOf("वेक वर्ड बदलकर", "वेक वर्ड रखो", "वेक वर्ड", "wake word to", "wake word", "अपना नाम")
+            for (p in prefixes) {
+                val idx = lower.indexOf(p)
+                if (idx != -1) {
+                    val candidate = input.substring(idx + p.length).replace("रखो", "").replace("करो", "").replace("set", "").replace("to", "").replace("बदलो", "").trim()
+                    if (candidate.isNotBlank()) {
+                        newName = candidate
+                        break
+                    }
+                }
+            }
+            if (newName.isNotBlank()) {
+                com.example.data.local.VoicePreferences.saveCustomWakeWord(context, newName)
+                return CommandResult(
+                    spokenResponse = "जी मास्टर! अब से मैं '$newName' पुकारने पर हाजिर होऊंगी!",
+                    actionTaken = SnehaAction.SetCustomWakeWord(newName)
+                )
+            } else {
+                return CommandResult(
+                    spokenResponse = "मास्टर, सेटिंग्स में कस्टम वेक-वर्ड विकल्प खोला गया है। आप अपनी पसंद का नाम चुन सकते हैं।",
+                    actionTaken = SnehaAction.OpenSettings
+                )
+            }
+        }
+
+        // 3b. WhatsApp Auto-Reply Command
+        if ((lower.contains("व्हाट्सएप") || lower.contains("whatsapp")) &&
+            (lower.contains("रिप्लाई") || lower.contains("reply") || lower.contains("ऑटो") || lower.contains("auto"))
+        ) {
+            return CommandResult(
+                spokenResponse = "जी मास्टर! व्हाट्सएप ऑटो-रिप्लाई खोला गया है। आपके आने वाले मैसेज पर निर्धारित उत्तर खुद चला जाएगा।",
+                actionTaken = SnehaAction.OpenWhatsAppAutoReply
+            )
+        }
+
+        // 3c. Live Call Translator Command
+        if (lower.contains("ट्रांसलेटर") || lower.contains("translator") || lower.contains("अनुवाद") ||
+            lower.contains("translate") || lower.contains("अंग्रेजी") || lower.contains("english")
+        ) {
+            return CommandResult(
+                spokenResponse = "जी मास्टर! लाइव कॉल व वॉयस ट्रांसलेटर शुरू किया गया है। अब आप हिंदी और अंग्रेजी में सीधे बात कर सकते हैं।",
+                actionTaken = SnehaAction.OpenCallTranslator
+            )
+        }
+
+        // 3d. Smart Class Timetable Command
+        if (lower.contains("टाइमटेबल") || lower.contains("timetable") || lower.contains("मेरी क्लास") ||
+            lower.contains("अगली क्लास") || lower.contains("lecture") || lower.contains("पीरियड")
+        ) {
+            val next = ClassTimetableManager.getNextLecture()
+            val spoken = if (next != null) {
+                "मास्टर, आपकी अगली क्लास ${next.subject} की है, जो ${next.startTime} बजे ${next.room} में शुरू होगी।"
+            } else {
+                "मास्टर, स्मार्ट क्लास टाइमटेबल खोला गया है।"
+            }
+            return CommandResult(
+                spokenResponse = spoken,
+                actionTaken = SnehaAction.OpenClassTimetable
+            )
+        }
+
+        // 3e. Anti-Theft Guard Command ("एंटी थेफ्ट ऑन करो", "पॉकेट अलार्म चालू करो", "डोंट टच माय फोन", etc.)
+        if (lower.contains("एंटी थेफ्ट") || lower.contains("anti theft") || lower.contains("चोरी") ||
+            lower.contains("पॉकेट अलार्म") || lower.contains("pocket alarm") || lower.contains("डोंट टच") || lower.contains("मोशन अलार्म")
+        ) {
+            if (lower.contains("पॉकेट") || lower.contains("pocket")) {
+                AntiTheftManager.setPocketGuard(context, true)
+                return CommandResult(
+                    spokenResponse = "मास्टर, पॉकेट एंटी-थेफ्ट गार्ड चालू कर दिया गया है। जेब से फोन निकाले जाने पर सायरन बजेगा।",
+                    actionTaken = SnehaAction.OpenAntiTheft
+                )
+            }
+            if (lower.contains("मोशन") || lower.contains("motion") || lower.contains("टेबल") || lower.contains("टच")) {
+                AntiTheftManager.setMotionGuard(context, true)
+                return CommandResult(
+                    spokenResponse = "मास्टर, मोशन गार्ड सक्रिय है। फोन हिलाने या छूने पर तुरंत सायरन बजेगा।",
+                    actionTaken = SnehaAction.OpenAntiTheft
+                )
+            }
+            return CommandResult(
+                spokenResponse = "जी मास्टर! एंटी-थेफ्ट गार्ड व इंट्रूडर स्क्रीन खोली गई है। आप पॉकेट और मोशन गार्ड ऑन कर सकते हैं।",
+                actionTaken = SnehaAction.OpenAntiTheft
+            )
+        }
+
+        // 3f. AI Call Summary Command ("कॉल समरी", "कॉल का सारांश", "कॉल नोट्स", "call summary")
+        if (lower.contains("समरी") || lower.contains("summary") || lower.contains("सारांश") || lower.contains("कॉल नोट्स")) {
+            val list = CallSummaryManager.summaries.value
+            val first = list.firstOrNull()
+            val spoken = if (first != null) {
+                "मास्टर, आपकी पिछली कॉल ${first.callerName} से हुई थी। मुख्य बात: ${first.summaryPoints.firstOrNull() ?: ""}।"
+            } else {
+                "मास्टर, AI कॉल सारांश व कार्य सूची खोली गई है।"
+            }
+            return CommandResult(
+                spokenResponse = spoken,
+                actionTaken = SnehaAction.OpenCallSummary
+            )
+        }
+
+        // 3g. AI Cloud Connector / ChatGPT Command ("चैटजीपीटी कनेक्ट करो", "क्लाउड कनेक्टर", "chatgpt", "claude")
+        if (lower.contains("chatgpt") || lower.contains("चैटजीपीटी") || lower.contains("क्लाउड कनेक्टर") ||
+            lower.contains("connector") || lower.contains("claude") || lower.contains("क्लॉड") || lower.contains("ollama")
+        ) {
+            return CommandResult(
+                spokenResponse = "जी मास्टर! मल्टी-मॉडल AI क्लाउड कनेक्टर खोला गया है। आप ChatGPT, Gemini या Claude को जोड़ सकते हैं।",
+                actionTaken = SnehaAction.OpenAiConnector
+            )
+        }
+
+        // 3h. Call Voice Avatar Command ("कॉल की आवाज बदलो", "विक्रम की आवाज", "सिक्योरिटी गार्ड आवाज")
+        if (lower.contains("कॉल आवाज") || lower.contains("कॉल आवाज़") || lower.contains("वॉइस अवतार") || lower.contains("voice avatar")) {
+            if (lower.contains("विक्रम") || lower.contains("vikram") || lower.contains("पुरुष")) {
+                CallAssistantManager.setActiveVoiceAvatar(CallVoiceAvatar.VIKRAM_MALE)
+                return CommandResult(
+                    spokenResponse = "जी मास्टर! कॉल अटेंडेंट के लिए विक्रम (गंभीर पुरुष आवाज) सेट कर दी गई है।",
+                    actionTaken = SnehaAction.OpenCallAssistant
+                )
+            }
+            if (lower.contains("सिक्योरिटी") || lower.contains("security") || lower.contains("पुलिस")) {
+                CallAssistantManager.setActiveVoiceAvatar(CallVoiceAvatar.SECURITY_GUARD)
+                return CommandResult(
+                    spokenResponse = "जी मास्टर! सुरक्षा गार्ड / पुलिस टोन एक्टिवेट कर दी गई है। स्पैमर्स अब तुरंत अलर्ट हो जाएंगे।",
+                    actionTaken = SnehaAction.OpenCallAssistant
+                )
+            }
+            return CommandResult(
+                spokenResponse = "मास्टर, कॉल असिस्टेंट में वॉयस चेंजर मेनू खोला गया है। आप स्नेहा, विक्रम, सिक्योरिटी गार्ड या रोबोट अवतार चुन सकते हैं।",
+                actionTaken = SnehaAction.OpenCallAssistant
+            )
+        }
+
+        // 4. Spoken Voice PIN Unlock (e.g. "मेरा पिन 1234 है फोन अनलॉक करो" or "पिन 1234 अनलॉक")
+        if ((lower.contains("पिन") || lower.contains("pin")) && (lower.contains("अनलॉक") || lower.contains("unlock") || lower.contains("खोलो"))) {
+            val digitsMatch = Regex("(\\d{4,6})").find(input)
+            if (digitsMatch != null) {
+                val spokenPin = digitsMatch.value
+                val isCorrect = SecurityUnlockPreferences.verifyPin(context, spokenPin)
+                if (isCorrect) {
+                    if (activity != null) {
+                        PhoneControlManager.requestEmergencyUnlock(activity) {}
+                    }
+                    return CommandResult(
+                        spokenResponse = "मास्टर, आपका पिन $spokenPin सत्यापित हो गया है! फोन सफलतापूर्वक अनलॉक कर दिया गया है।",
+                        actionTaken = SnehaAction.UnlockPhone(verifiedWithPin = true)
+                    )
+                } else {
+                    return CommandResult(
+                        spokenResponse = "मास्टर, दर्ज किया गया पिन $spokenPin गलत है। कृपया सही पिन बोलें या स्क्रीन पर डालें।",
+                        actionTaken = SnehaAction.OpenSecurityUnlock
+                    )
+                }
+            }
+        }
+
+        // 4. Phone Unlock Request ("फोन अनलॉक करो", "unlock phone", "स्क्रीन खोलो", "अनलॉक करो")
+        if (lower.contains("फोन अनलॉक") || lower.contains("phone unlock") || lower.contains("स्क्रीन अनलॉक") ||
+            lower.contains("डिवाइस अनलॉक") || lower == "अनलॉक करो" || lower == "unlock" || lower == "unlock phone"
+        ) {
+            if (activity != null) {
+                PhoneControlManager.requestEmergencyUnlock(activity) {}
+            }
+            return CommandResult(
+                spokenResponse = "जी मास्टर, मैं फोन अनलॉक कर रही हूँ। कृपया अपना पिन, पैटर्न या पासवर्ड दर्ज करें या बोलें।",
+                actionTaken = SnehaAction.OpenSecurityUnlock
+            )
+        }
+
+        // 5. Real-time Screen Share ("स्क्रीन शेयर करो", "start screen share", "स्क्रीन दिखाओ", "स्क्रीन शेयर बंद करो")
+        if (lower.contains("screen share") || lower.contains("स्क्रीन शेयर") || lower.contains("स्क्रीन साझा")) {
+            if (lower.contains("बंद") || lower.contains("stop") || lower.contains("हटाओ") || lower.contains("रोक")) {
+                return CommandResult(
+                    spokenResponse = "मास्टर, स्क्रीन शेयर सफलतापूर्वक रोक दिया गया है।",
+                    actionTaken = SnehaAction.StopScreenShare
+                )
+            } else {
+                return CommandResult(
+                    spokenResponse = "जी मास्टर! रियल-टाइम स्क्रीन शेयर शुरू किया जा रहा है। अब आप अपनी स्क्रीन लाइव साझा कर सकते हैं।",
+                    actionTaken = SnehaAction.StartScreenShare
+                )
+            }
+        }
+
+        // 6. Emergency Unlock & SOS Alarm
+        if (lower.contains("emergency") || lower.contains("इमरजेंसी") || lower.contains("sos") || lower.contains("अलार्म बजाओ")) {
+            if (activity != null) {
+                PhoneControlManager.requestEmergencyUnlock(activity) {}
+            }
+            PhoneControlManager.startEmergencyAlarm(context)
+            return CommandResult(
+                spokenResponse = "मास्टर, इमरजेंसी मोड सक्रिय कर दिया गया है! लॉकस्क्रीन हटाने का प्रयास किया गया और SOS सायरन चालू है।",
+                actionTaken = SnehaAction.EmergencyUnlockAndSos
+            )
+        }
+
+        // 7. Stop Alarm / Emergency
+        if ((lower.contains("alarm") || lower.contains("अलार्म") || lower.contains("sos")) &&
+            (lower.contains("बंद") || lower.contains("stop") || lower.contains("off") || lower.contains("रोक"))
+        ) {
+            PhoneControlManager.stopEmergencyAlarm()
+            PhoneControlManager.stopEmergencyStrobe(context)
+            return CommandResult(
+                spokenResponse = "मास्टर, अलार्म और इमरजेंसी सायरन बंद कर दिया गया है।",
+                actionTaken = null
+            )
+        }
+
+        // 8. Torch / Flashlight Control
+        if (lower.contains("torch") || lower.contains("टॉर्च") || lower.contains("flashlight") || lower.contains("फ्लैशलाइट")) {
+            val isOff = lower.contains("बंद") || lower.contains("off") || lower.contains("हटा")
+            val isOn = lower.contains("चालू") || lower.contains("ऑन") || lower.contains("on") || lower.contains("जला")
+            val targetState = if (isOff) false else if (isOn) true else !PhoneControlManager.isTorchActive()
+
+            val (success, msg) = PhoneControlManager.toggleTorch(context, targetState)
+            val prefix = if (targetState) "मास्टर, टॉर्च चालू कर दी गई है।" else "मास्टर, टॉर्च बंद कर दी गई है।"
+            return CommandResult(
+                spokenResponse = "$prefix $msg",
+                actionTaken = SnehaAction.ToggleTorch(targetState)
+            )
+        }
+
+        // 9. Volume Adjustments
+        if (lower.contains("volume") || lower.contains("वॉल्यूम") || lower.contains("आवाज") || lower.contains("साउंड")) {
+            if (lower.contains("बढ़ा") || lower.contains("up") || lower.contains("तेज") || lower.contains("high")) {
+                val msg = PhoneControlManager.adjustVolume(context, true)
+                return CommandResult(spokenResponse = "मास्टर, $msg", actionTaken = SnehaAction.AdjustVolume(true))
+            }
+            if (lower.contains("कम") || lower.contains("down") || lower.contains("धीम") || lower.contains("low")) {
+                val msg = PhoneControlManager.adjustVolume(context, false)
+                return CommandResult(spokenResponse = "मास्टर, $msg", actionTaken = SnehaAction.AdjustVolume(false))
+            }
+            if (lower.contains("म्यूट") || lower.contains("mute") || lower.contains("शांत")) {
+                val msg = PhoneControlManager.muteVolume(context)
+                return CommandResult(spokenResponse = "मास्टर, $msg", actionTaken = SnehaAction.MuteVolume)
+            }
+        }
+
+        // 10. Battery Status
+        if (lower.contains("battery") || lower.contains("बैटरी") || lower.contains("चार्ज") || lower.contains("charging")) {
+            val msg = PhoneControlManager.getBatteryInfo(context)
+            return CommandResult(spokenResponse = "मास्टर, $msg", actionTaken = SnehaAction.CheckBattery)
+        }
+
+        // 11. Read Messages & Notifications (Safe with OTP masking)
+        if (lower.contains("मैसेज") || lower.contains("संदेश") || lower.contains("message") || lower.contains("notification") || lower.contains("sms") || lower.contains("एसएमएस")) {
+            if (lower.contains("पढ़ो") || lower.contains("पढ़ो") || lower.contains("read") || lower.contains("सुनाओ") || lower.contains("check") || lower.contains("बताओ")) {
+                val customSpeech = onReadMessagesRequest?.invoke() ?: run {
+                    val db = com.example.data.local.SnehaDatabase.getInstance(context)
+                    val list = db.notificationLogDao().getRecentNotificationList(4)
+                    if (list.isEmpty()) {
+                        "मास्टर, आपके पास कोई नया संदेश या एसएमएस नहीं मिला है।"
+                    } else {
+                        val sb = StringBuilder("मास्टर, आपके पास नए संदेश हैं: ")
+                        list.forEachIndexed { idx, it ->
+                            sb.append("संदेश ${idx + 1}: ${OtpSafetyGuard.sanitizeForSpeech(it.sender, it.originalText)} ")
+                        }
+                        sb.toString()
+                    }
+                }
+                return CommandResult(
+                    spokenResponse = customSpeech,
+                    actionTaken = SnehaAction.ReadMessagesSafe
+                )
+            }
+        }
+
+        // 12. In-App Searches: YouTube, WhatsApp, Maps
+        if (lower.contains("youtube") || lower.contains("यूट्यूब")) {
+            if (lower.contains("सर्च") || lower.contains("search") || lower.contains("चलाओ") || lower.contains("play")) {
+                val query = extractQuery(input, listOf("यूट्यूब पर सर्च करो", "यूट्यूब में सर्च करो", "यूट्यूब पर", "यूट्यूब में", "search on youtube for", "youtube search", "youtube par search", "youtube"))
+                PhoneControlManager.searchYouTube(context, query)
+                return CommandResult(
+                    spokenResponse = "मास्टर, यूट्यूब पर '$query' खोजा जा रहा है।",
+                    actionTaken = SnehaAction.SearchYouTube(query)
+                )
+            }
+        }
+
+        if (lower.contains("whatsapp") || lower.contains("व्हाट्सएप") || lower.contains("वाट्सएप")) {
+            if (lower.contains("सर्च") || lower.contains("search") || lower.contains("भेजो") || lower.contains("send") || lower.contains("ढूंढो")) {
+                val query = extractQuery(input, listOf("व्हाट्सएप पर सर्च करो", "व्हाट्सएप में सर्च करो", "व्हाट्सएप पर", "व्हाट्सएप में", "search on whatsapp for", "whatsapp search", "whatsapp par", "whatsapp"))
+                PhoneControlManager.searchWhatsApp(context, query)
+                return CommandResult(
+                    spokenResponse = "मास्टर, व्हाट्सएप पर '$query' खोजा जा रहा है।",
+                    actionTaken = SnehaAction.SearchInsideApp("WhatsApp", query)
+                )
+            }
+        }
+
+        // 13. Timer / Alarm
+        if (lower.contains("timer") || lower.contains("टाइमर")) {
+            val minutesRegex = Regex("(\\d+)")
+            val match = minutesRegex.find(input)
+            val minutes = match?.value?.toIntOrNull() ?: 5
+            val (success, msg) = PhoneControlManager.setTimer(context, minutes)
+            return CommandResult(spokenResponse = "मास्टर, $msg", actionTaken = SnehaAction.SetTimer(minutes))
+        }
+
+        // 14. Open App Command ("खोलो", "open", "चलाओ")
+        if (lower.contains("खोलो") || lower.contains("open") || lower.contains("चलाओ") || lower.contains("launch") || lower.contains("app")) {
+            val (success, msg) = PhoneControlManager.openAppByName(context, input)
+            if (success) {
+                return CommandResult(spokenResponse = "मास्टर, $msg", actionTaken = SnehaAction.OpenApp(input, ""))
+            }
+        }
+
+        // 15. General Conversational / AI Query with Gemini API (Always addressing as Master)
+        val aiResponse = GeminiApiClient.getSnehaAiResponse(input)
+        val formattedResponse = if (!aiResponse.contains("मास्टर") && !aiResponse.contains("master", ignoreCase = true)) {
+            "मास्टर, $aiResponse"
+        } else {
+            aiResponse
+        }
+
+        return CommandResult(
+            spokenResponse = formattedResponse,
+            actionTaken = SnehaAction.ConversationalAnswer(formattedResponse)
+        )
+    }
+
+    private fun extractQuery(fullText: String, prefixes: List<String>): String {
+        var result = fullText
+        for (p in prefixes) {
+            val idx = result.indexOf(p, ignoreCase = true)
+            if (idx != -1) {
+                result = result.substring(idx + p.length).trim()
+                break
+            }
+        }
+        return result.replace("पर", "").replace("में", "").replace("करो", "").replace("for", "").trim()
+    }
+}

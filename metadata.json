@@ -1,0 +1,6 @@
+{
+  "name": "Sneha",
+  "description": "स्नेहा AI - स्मार्ट फोन व वॉयस असिस्टेंट: स्पैम ब्लॉकर, एंटी-थेफ्ट गार्ड, AI कॉल सारांश, वॉयस अवतार चेंजर, व्हाट्सएप ऑटो-रिप्लाई, क्लास टाइमटेबल व ChatGPT/Gemini क्लाउड कनेक्टर।",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
