@@ -116,9 +116,9 @@ fun AssistantScreen(
     val context = LocalContext.current
     var textInput by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
-    var showFeatureGuideDialog by remember { mutableStateOf(false) }
 
     val currentWakeWord = com.example.data.local.VoicePreferences.getCustomWakeWord(context)
+    val currentUserName = com.example.data.local.VoicePreferences.getUserName(context)
     val isCallRinging by CallAssistantManager.isCallRinging.collectAsState()
     val isCallActive by CallAssistantManager.isCallActive.collectAsState()
     val callerName by CallAssistantManager.currentCaller.collectAsState()
@@ -128,22 +128,6 @@ fun AssistantScreen(
             listState.animateScrollToItem(messages.size - 1)
         }
     }
-
-    val quickChips = listOf(
-        "हे $currentWakeWord!",
-        "🛡️ स्पैम ब्लॉकर खोलो",
-        "💬 व्हाट्सएप ऑटो-रिप्लाई खोलो",
-        "🌐 लाइव ट्रांसलेटर खोलो",
-        "🎓 मेरी अगली क्लास कब है?",
-        "वेक वर्ड बदलो",
-        "कॉल पिक करके बोलो मैं क्लास में हूँ",
-        "फोन अनलॉक करो",
-        "स्क्रीन शेयर करो",
-        "यूट्यूब खोलो",
-        "टॉर्च चालू करो",
-        "सुरक्षित मैसेज पढ़ो",
-        "बैटरी कितनी है?"
-    )
 
     Column(
         modifier = modifier
@@ -161,18 +145,16 @@ fun AssistantScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
-                        .background(
-                            brush = Brush.linearGradient(listOf(SnehaCyan, SnehaPurple)),
-                            shape = CircleShape
-                        ),
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .border(1.5.dp, Brush.linearGradient(listOf(SnehaCyan, SnehaPink)), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.AutoAwesome,
+                    androidx.compose.foundation.Image(
+                        painter = androidx.compose.ui.res.painterResource(id = com.example.R.drawable.sneha_girl_character_1790568612380),
                         contentDescription = "Sneha AI",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
                     )
                 }
                 Spacer(modifier = Modifier.width(10.dp))
@@ -201,11 +183,11 @@ fun AssistantScreen(
                     }
                     Text(
                         text = when (voiceState) {
-                            VoiceState.LISTENING -> "मास्टर, सुन रही हूँ... 🎙️"
-                            VoiceState.SPEAKING -> "मास्टर, बोल रही हूँ... 🔊"
-                            VoiceState.THINKING -> "मास्टर, सोच रही हूँ... ⚡"
-                            VoiceState.ERROR -> "मास्टर, वॉयस एरर ठीक हुआ"
-                            VoiceState.IDLE -> "मास्टर, मैं हाजिर हूँ • बोलिए"
+                            VoiceState.LISTENING -> "$currentUserName, सुन रही हूँ... 🎙️"
+                            VoiceState.SPEAKING -> "$currentUserName, बोल रही हूँ... 🔊"
+                            VoiceState.THINKING -> "$currentUserName, सोच रही हूँ... ⚡"
+                            VoiceState.ERROR -> "$currentUserName, वॉयस एरर ठीक हुआ"
+                            VoiceState.IDLE -> "$currentUserName, मैं हाजिर हूँ • बोलिए"
                         },
                         fontSize = 11.sp,
                         color = when (voiceState) {
@@ -219,65 +201,6 @@ fun AssistantScreen(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Info & Guide Dialog Trigger
-                IconButton(
-                    onClick = { showFeatureGuideDialog = true },
-                    modifier = Modifier.testTag("btn_header_feature_info")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = "फीचर्स व एरर जानकारी",
-                        tint = SnehaCyan
-                    )
-                }
-
-                // Quick Shortcut for Call Assistant
-                IconButton(
-                    onClick = onOpenCallAssistant,
-                    modifier = Modifier.testTag("btn_header_call_assistant")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.SupportAgent,
-                        contentDescription = "कॉल अटेंडेंट",
-                        tint = SnehaGreen
-                    )
-                }
-
-                // Quick Shortcut for Security Unlock
-                IconButton(
-                    onClick = onOpenSecurityUnlock,
-                    modifier = Modifier.testTag("btn_header_security_unlock")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.LockOpen,
-                        contentDescription = "फोन अनलॉक",
-                        tint = SnehaCyan
-                    )
-                }
-
-                // Quick Shortcut for Screen Share
-                IconButton(
-                    onClick = onOpenScreenShare,
-                    modifier = Modifier.testTag("btn_header_screen_share")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ScreenShare,
-                        contentDescription = "स्क्रीन शेयर",
-                        tint = SnehaPurple
-                    )
-                }
-
-                IconButton(
-                    onClick = onOpenVoiceSettings,
-                    modifier = Modifier.testTag("btn_open_voice_settings")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Tune,
-                        contentDescription = "वॉयस कस्टमाइज़ेशन",
-                        tint = SnehaCyan
-                    )
-                }
-
                 IconButton(
                     onClick = onToggleVoiceOutput,
                     modifier = Modifier.testTag("toggle_voice_output_btn")
@@ -300,154 +223,6 @@ fun AssistantScreen(
                     )
                 }
             }
-        }
-
-        // Comprehensive Feature & Error 11/5 Diagnostics Dialog
-        if (showFeatureGuideDialog) {
-            AlertDialog(
-                onDismissRequest = { showFeatureGuideDialog = false },
-                containerColor = SnehaDarkSurface,
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("💡 स्नेहा AI फीचर्स व गाइड", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = SnehaCyan)
-                    }
-                },
-                text = {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        // Section 1: Error 5 and 11 explanation
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = SnehaDarkSurfaceVariant,
-                            border = BorderStroke(1.dp, SnehaPink.copy(alpha = 0.5f))
-                        ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
-                                Text("🔧 वॉयस इनपुट Error 5 और 11 क्या हैं?", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = SnehaPink)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text("• Error 5 (ERROR_CLIENT): यह एंड्रॉइड स्पीच रिकग्नाइज़र का क्लाइंट स्टेट टकराव था जब रिकग्नाइज़र बार-बार री-क्रिएट हो रहा था।", fontSize = 11.sp, color = SnehaTextPrimary)
-                                Text("• Error 11 (ERROR_SERVER_DISCONNECTED): यह Google Speech Service का बैकग्राउंड कनेक्शन टूटने पर आता है।", fontSize = 11.sp, color = SnehaTextPrimary)
-                                Text("✅ समाधान: सिंगल-इंस्टेंस कनेक्शन व साइलेंट ऑटो-रिकवरी लागू कर दी गई है। अब यह एरर नहीं आएगा!", fontSize = 11.sp, color = SnehaGreen, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-
-                        // Section 2: 5 Main Features shortcuts
-                        Text("🚀 5 नए सशक्त फीचर्स:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = SnehaTextPrimary)
-
-                        Button(
-                            onClick = {
-                                showFeatureGuideDialog = false
-                                onOpenSpamBlocker()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = SnehaDarkSurfaceVariant),
-                            border = BorderStroke(1.dp, SnehaPink.copy(alpha = 0.6f)),
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("🛡️ 1. स्मार्ट स्पैम कॉलर ब्लॉकर (AI Truecaller)", fontSize = 11.sp, color = SnehaPink)
-                        }
-
-                        Button(
-                            onClick = {
-                                showFeatureGuideDialog = false
-                                onOpenVoiceSettings()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = SnehaDarkSurfaceVariant),
-                            border = BorderStroke(1.dp, SnehaCyan.copy(alpha = 0.6f)),
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("🎙️ 2. कस्टम वेक-वर्ड (अपनी मर्जी का नाम)", fontSize = 11.sp, color = SnehaCyan)
-                        }
-
-                        Button(
-                            onClick = {
-                                showFeatureGuideDialog = false
-                                onOpenWhatsAppAutoReply()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = SnehaDarkSurfaceVariant),
-                            border = BorderStroke(1.dp, Color(0xFF25D366).copy(alpha = 0.6f)),
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("💬 3. व्हाट्सएप कॉल व मैसेज ऑटो-रिप्लाई", fontSize = 11.sp, color = Color(0xFF25D366))
-                        }
-
-                        Button(
-                            onClick = {
-                                showFeatureGuideDialog = false
-                                onOpenCallTranslator()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = SnehaDarkSurfaceVariant),
-                            border = BorderStroke(1.dp, SnehaCyan.copy(alpha = 0.6f)),
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("🌐 4. कॉल के दौरान लाइव ट्रांसलेटर", fontSize = 11.sp, color = SnehaCyan)
-                        }
-
-                        Button(
-                            onClick = {
-                                showFeatureGuideDialog = false
-                                onOpenClassTimetable()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = SnehaDarkSurfaceVariant),
-                            border = BorderStroke(1.dp, Color(0xFFFFB300).copy(alpha = 0.6f)),
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("🎓 5. स्मार्ट क्लास टाइमटेबल मोड", fontSize = 11.sp, color = Color(0xFFFFB300))
-                        }
-
-                        Button(
-                            onClick = {
-                                showFeatureGuideDialog = false
-                                onOpenAntiTheft()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = SnehaDarkSurfaceVariant),
-                            border = BorderStroke(1.dp, Color.Red.copy(alpha = 0.6f)),
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("🚨 6. एंटी-थेफ्ट गार्ड व इंट्रूडर सेल्फी", fontSize = 11.sp, color = Color(0xFFFF5252))
-                        }
-
-                        Button(
-                            onClick = {
-                                showFeatureGuideDialog = false
-                                onOpenCallSummary()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = SnehaDarkSurfaceVariant),
-                            border = BorderStroke(1.dp, SnehaCyan.copy(alpha = 0.6f)),
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("📝 7. AI कॉल सारांश व कार्य सूची (Notes)", fontSize = 11.sp, color = SnehaCyan)
-                        }
-
-                        Button(
-                            onClick = {
-                                showFeatureGuideDialog = false
-                                onOpenAiConnector()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = SnehaDarkSurfaceVariant),
-                            border = BorderStroke(1.dp, Color(0xFF00E676).copy(alpha = 0.6f)),
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("☁️ 8. AI क्लाउड कनेक्टर (ChatGPT / Claude)", fontSize = 11.sp, color = Color(0xFF00E676))
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showFeatureGuideDialog = false }) {
-                        Text("समझ गया, धन्यवाद", color = SnehaCyan, fontWeight = FontWeight.Bold)
-                    }
-                }
-            )
         }
 
         // Active Incoming Call Quick Alert Banner
@@ -512,7 +287,7 @@ fun AssistantScreen(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
+                .padding(horizontal = 16.dp, vertical = 6.dp),
             colors = CardDefaults.cardColors(containerColor = SnehaDarkSurface),
             shape = RoundedCornerShape(20.dp),
             border = borderStroke()
@@ -520,7 +295,7 @@ fun AssistantScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(12.dp),
+                    .padding(14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 VoiceWaveVisualizer(
@@ -549,306 +324,6 @@ fun AssistantScreen(
             }
         }
 
-        // Quick Feature Banner (Spam Blocker, WhatsApp Auto-Reply, Live Translator, Class Timetable, Unlock, Screen Share & Call Assistant)
-        LazyRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            item {
-                Surface(
-                    modifier = Modifier
-                        .clickable { onOpenSpamBlocker() }
-                        .testTag("chip_shortcut_spam_blocker"),
-                    color = SnehaDarkSurfaceVariant,
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, SnehaPink.copy(alpha = 0.8f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("🛡️", fontSize = 13.sp)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "स्पैम ब्लॉकर",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SnehaPink
-                        )
-                    }
-                }
-            }
-
-            item {
-                Surface(
-                    modifier = Modifier
-                        .clickable { onOpenWhatsAppAutoReply() }
-                        .testTag("chip_shortcut_whatsapp"),
-                    color = SnehaDarkSurfaceVariant,
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, Color(0xFF25D366).copy(alpha = 0.8f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("💬", fontSize = 13.sp)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "व्हाट्सएप ऑटो",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF25D366)
-                        )
-                    }
-                }
-            }
-
-            item {
-                Surface(
-                    modifier = Modifier
-                        .clickable { onOpenCallTranslator() }
-                        .testTag("chip_shortcut_translator"),
-                    color = SnehaDarkSurfaceVariant,
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, SnehaCyan.copy(alpha = 0.8f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("🌐", fontSize = 13.sp)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "लाइव अनुवादक",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SnehaCyan
-                        )
-                    }
-                }
-            }
-
-            item {
-                Surface(
-                    modifier = Modifier
-                        .clickable { onOpenClassTimetable() }
-                        .testTag("chip_shortcut_class_timetable"),
-                    color = SnehaDarkSurfaceVariant,
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, Color(0xFFFFB300).copy(alpha = 0.8f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("🎓", fontSize = 13.sp)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "क्लास टाइमटेबल",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFFFB300)
-                        )
-                    }
-                }
-            }
-
-            item {
-                Surface(
-                    modifier = Modifier
-                        .clickable { onOpenCallAssistant() }
-                        .testTag("chip_shortcut_call_assistant"),
-                    color = SnehaDarkSurfaceVariant,
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, SnehaGreen.copy(alpha = 0.6f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PhoneInTalk,
-                            contentDescription = null,
-                            tint = SnehaGreen,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "कॉल असिस्टेंट",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = SnehaGreen
-                        )
-                    }
-                }
-            }
-
-            item {
-                Surface(
-                    modifier = Modifier
-                        .clickable { onOpenSecurityUnlock() }
-                        .testTag("chip_shortcut_unlock"),
-                    color = SnehaDarkSurfaceVariant,
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, SnehaCyan.copy(alpha = 0.5f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.LockOpen,
-                            contentDescription = null,
-                            tint = SnehaCyan,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "फोन अनलॉक",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = SnehaCyan
-                        )
-                    }
-                }
-            }
-
-            item {
-                Surface(
-                    modifier = Modifier
-                        .clickable { onOpenScreenShare() }
-                        .testTag("chip_shortcut_screenshare"),
-                    color = SnehaDarkSurfaceVariant,
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, SnehaPurple.copy(alpha = 0.6f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ScreenShare,
-                            contentDescription = null,
-                            tint = SnehaPurple,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "स्क्रीन शेयर",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = SnehaPurple
-                        )
-                    }
-                }
-            }
-
-            item {
-                Surface(
-                    modifier = Modifier
-                        .clickable { onOpenAntiTheft() }
-                        .testTag("chip_shortcut_antitheft"),
-                    color = SnehaDarkSurfaceVariant,
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, Color.Red.copy(alpha = 0.6f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("🚨", fontSize = 13.sp)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "एंटी-थेफ्ट गार्ड",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFFF5252)
-                        )
-                    }
-                }
-            }
-
-            item {
-                Surface(
-                    modifier = Modifier
-                        .clickable { onOpenCallSummary() }
-                        .testTag("chip_shortcut_call_summary"),
-                    color = SnehaDarkSurfaceVariant,
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, SnehaCyan.copy(alpha = 0.6f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("📝", fontSize = 13.sp)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "AI कॉल सारांश",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SnehaCyan
-                        )
-                    }
-                }
-            }
-
-            item {
-                Surface(
-                    modifier = Modifier
-                        .clickable { onOpenAiConnector() }
-                        .testTag("chip_shortcut_ai_connector"),
-                    color = SnehaDarkSurfaceVariant,
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, Color(0xFF00E676).copy(alpha = 0.6f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("☁️", fontSize = 13.sp)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "AI कनेक्टर",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF00E676)
-                        )
-                    }
-                }
-            }
-        }
-
-        // Quick Suggestions Bar
-        LazyRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 6.dp),
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(quickChips) { chip ->
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = SnehaDarkSurfaceVariant,
-                    border = borderStroke(),
-                    modifier = Modifier
-                        .clickable { onSendMessage(chip) }
-                        .testTag("quick_chip_${chip.hashCode()}")
-                ) {
-                    Text(
-                        text = chip,
-                        fontSize = 12.sp,
-                        color = SnehaCyan,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                    )
-                }
-            }
-        }
-
         // Chat Message Feed
         LazyColumn(
             state = listState,
@@ -861,7 +336,7 @@ fun AssistantScreen(
         ) {
             if (messages.isEmpty()) {
                 item {
-                    EmptyChatGreeting(onSuggest = onSendMessage)
+                    EmptyChatGreeting(userName = currentUserName, onSuggest = onSendMessage)
                 }
             }
 
@@ -890,7 +365,7 @@ fun AssistantScreen(
                     onValueChange = { textInput = it },
                     placeholder = {
                         Text(
-                            "मास्टर, स्नेहा से कुछ भी कहें या आदेश दें...",
+                            "$currentUserName, स्नेहा से कुछ भी कहें या आदेश दें...",
                             fontSize = 13.sp,
                             color = SnehaTextSecondary
                         )
@@ -1058,42 +533,45 @@ private fun ChatMessageBubble(
 }
 
 @Composable
-private fun EmptyChatGreeting(onSuggest: (String) -> Unit) {
-    Card(
+private fun EmptyChatGreeting(userName: String = "मास्टर", onSuggest: (String) -> Unit) {
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 16.dp),
-        colors = CardDefaults.cardColors(containerColor = SnehaDarkSurface),
-        shape = RoundedCornerShape(20.dp),
-        border = borderStroke()
+            .padding(vertical = 40.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Column(
+        // Elegant Sneha character portrait
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .size(110.dp)
+                .clip(CircleShape)
+                .border(2.5.dp, Brush.linearGradient(listOf(SnehaCyan, SnehaPink)), CircleShape),
+            contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = "नमस्ते मास्टर जी! मैं स्नेha हूँ 🌸",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = SnehaCyan
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "आपकी निजी AI वॉयस व फोन असिस्टेंट। Siri की तरह लॉकस्क्रीन पर भी 'हे स्नेहा' बोलते ही तुरंत सक्रिय हो जाऊँगी।",
-                fontSize = 13.sp,
-                color = SnehaTextSecondary,
-                lineHeight = 18.sp
-            )
-            Spacer(modifier = Modifier.height(14.dp))
-            Text(
-                text = "मास्टर, आप कह सकते हैं:\n• 'स्नेहा, कॉल पिक करके बोलो कि मैं क्लास में हूँ'\n• 'स्नेहा, फोन अनलॉक करो' (पिन/पैटर्न से)\n• 'स्नेहा, स्क्रीन शेयर करो' (रियल-टाइम लाइव)\n• 'यूट्यूब पर गाने चलाओ'\n• 'टॉर्च चालू करो'\n• 'सुरक्षित मैसेज पढ़ो' (OTP गोपनीय)\n• 'मेरा पिन 1234 है फोन अनलॉक करो'",
-                fontSize = 12.sp,
-                color = Color(0xFFCBD5E1),
-                lineHeight = 19.sp
+            androidx.compose.foundation.Image(
+                painter = androidx.compose.ui.res.painterResource(id = com.example.R.drawable.sneha_girl_character_1790568612380),
+                contentDescription = "स्नेहा AI",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop
             )
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "नमस्ते $userName जी! कहिए क्या सेवा करूँ?",
+            fontSize = 17.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = SnehaTextPrimary
+        )
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Text(
+            text = "माइक ऑन है, बस बोलिए या टाइप कीजिए...",
+            fontSize = 13.sp,
+            color = SnehaCyan
+        )
     }
 }
 

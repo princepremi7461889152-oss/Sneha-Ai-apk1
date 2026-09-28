@@ -5,10 +5,15 @@ import android.content.Context
 import android.media.AudioManager
 import android.os.Build
 import android.util.Log
+import com.example.data.local.ClassLectureEntity
+import com.example.data.local.SnehaDatabase
 import com.example.data.local.VoicePreferences
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
@@ -21,75 +26,47 @@ data class ClassLecture(
     val professor: String,
     val room: String,
     val startTime: String, // "09:00"
-    val endTime: String    // "10:00"
+    val endTime: String    // "10:30"
 )
 
 object ClassTimetableManager {
 
     private const val TAG = "ClassTimetableManager"
+    private val scope = CoroutineScope(Dispatchers.IO)
 
-    private val _lectures = MutableStateFlow<List<ClassLecture>>(
-        listOf(
-            ClassLecture(
-                id = "1",
-                dayOfWeek = DayOfWeek.MONDAY,
-                subject = "डेटा स्ट्रक्चर्स व एल्गोरिदम",
-                professor = "डॉ. शर्मा",
-                room = "कमरा 204",
-                startTime = "09:00",
-                endTime = "10:30"
-            ),
-            ClassLecture(
-                id = "2",
-                dayOfWeek = DayOfWeek.MONDAY,
-                subject = "कंप्यूटर नेटवर्क",
-                professor = "प्रो. गुप्ता",
-                room = "लैब 3",
-                startTime = "11:00",
-                endTime = "12:30"
-            ),
-            ClassLecture(
-                id = "3",
-                dayOfWeek = DayOfWeek.TUESDAY,
-                subject = "आर्टिफिशियल इंटेलिजेंस",
-                professor = "डॉ. वर्मा",
-                room = "ऑडिटोरियम",
-                startTime = "10:00",
-                endTime = "11:30"
-            ),
-            ClassLecture(
-                id = "4",
-                dayOfWeek = DayOfWeek.WEDNESDAY,
-                subject = "ऑपरेटिंग सिस्टम",
-                professor = "प्रो. सिंह",
-                room = "कमरा 105",
-                startTime = "09:30",
-                endTime = "11:00"
-            ),
-            ClassLecture(
-                id = "5",
-                dayOfWeek = DayOfWeek.THURSDAY,
-                subject = "डेटाबेस मैनेजमेंट सिस्टम (DBMS)",
-                professor = "डॉ. पटेल",
-                room = "कमरा 302",
-                startTime = "11:30",
-                endTime = "01:00"
-            ),
-            ClassLecture(
-                id = "6",
-                dayOfWeek = DayOfWeek.FRIDAY,
-                subject = "वेब व मोबाइल ऐप डेवलपमेंट",
-                professor = "प्रो. मेहता",
-                room = "कंप्यूटर लैब 1",
-                startTime = "10:00",
-                endTime = "12:00"
-            )
-        )
-    )
+    private val _lectures = MutableStateFlow<List<ClassLecture>>(emptyList())
     val lectures: StateFlow<List<ClassLecture>> = _lectures.asStateFlow()
 
     private val _isClassDndActive = MutableStateFlow(false)
     val isClassDndActive: StateFlow<Boolean> = _isClassDndActive.asStateFlow()
+
+    fun init(context: Context) {
+        scope.launch {
+            try {
+                val db = SnehaDatabase.getInstance(context)
+                db.classLectureDao().getAllLectures().collect { entityList ->
+                    val domainList = entityList.map { entity ->
+                        ClassLecture(
+                            id = entity.id,
+                            dayOfWeek = try {
+                                DayOfWeek.valueOf(entity.dayOfWeek.uppercase())
+                            } catch (e: Exception) {
+                                DayOfWeek.MONDAY
+                            },
+                            subject = entity.subject,
+                            professor = entity.professor,
+                            room = entity.room,
+                            startTime = entity.startTime,
+                            endTime = entity.endTime
+                        )
+                    }
+                    _lectures.value = domainList
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load lectures from Room", e)
+            }
+        }
+    }
 
     /**
      * Checks if a class is active right now
@@ -134,17 +111,31 @@ object ClassTimetableManager {
         val now = LocalTime.now()
         val formatter = DateTimeFormatter.ofPattern("HH:mm")
 
-        return _lectures.value
+        val todayLectures = _lectures.value
             .filter { it.dayOfWeek == today }
             .sortedBy { it.startTime }
-            .firstOrNull {
-                try {
-                    val start = LocalTime.parse(it.startTime, formatter)
-                    now.isBefore(start)
-                } catch (e: Exception) {
-                    false
-                }
+
+        val upcomingToday = todayLectures.firstOrNull {
+            try {
+                val start = LocalTime.parse(it.startTime, formatter)
+                now.isBefore(start)
+            } catch (e: Exception) {
+                false
             }
+        }
+
+        // If no more classes today, find first class for tomorrow or upcoming day
+        if (upcomingToday != null) return upcomingToday
+
+        // Check if there are any classes today at all
+        if (todayLectures.isNotEmpty()) {
+            return null // Today's classes have finished
+        }
+
+        // Fallback to Monday's first class if weekend or no classes today
+        return _lectures.value
+            .filter { it.dayOfWeek == DayOfWeek.MONDAY }
+            .minByOrNull { it.startTime }
     }
 
     /**
@@ -160,7 +151,6 @@ object ClassTimetableManager {
         if (active != null) {
             _isClassDndActive.value = true
             try {
-                // If DND policy access is granted, set priority/none
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && notifManager?.isNotificationPolicyAccessGranted == true) {
                     notifManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
                 } else {
@@ -174,11 +164,41 @@ object ClassTimetableManager {
         }
     }
 
-    fun addLecture(lecture: ClassLecture) {
+    fun addLecture(context: Context? = null, lecture: ClassLecture) {
         _lectures.value = _lectures.value + lecture
+        if (context != null) {
+            scope.launch {
+                try {
+                    val db = SnehaDatabase.getInstance(context)
+                    db.classLectureDao().insertLecture(
+                        ClassLectureEntity(
+                            id = lecture.id,
+                            dayOfWeek = lecture.dayOfWeek.name,
+                            subject = lecture.subject,
+                            professor = lecture.professor,
+                            room = lecture.room,
+                            startTime = lecture.startTime,
+                            endTime = lecture.endTime
+                        )
+                    )
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to persist lecture to Room", e)
+                }
+            }
+        }
     }
 
-    fun removeLecture(id: String) {
+    fun removeLecture(context: Context? = null, id: String) {
         _lectures.value = _lectures.value.filter { it.id != id }
+        if (context != null) {
+            scope.launch {
+                try {
+                    val db = SnehaDatabase.getInstance(context)
+                    db.classLectureDao().deleteLecture(id)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to delete lecture from Room", e)
+                }
+            }
+        }
     }
 }

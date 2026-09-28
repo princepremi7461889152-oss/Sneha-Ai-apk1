@@ -687,8 +687,13 @@ fun MainScreen(
                                 if (voiceState == VoiceState.SPEAKING) {
                                     voiceManager.stopSpeaking()
                                 } else {
-                                    voiceManager.speak("मास्टर, $phrase")
+                                    val userTitle = com.example.data.local.VoicePreferences.getUserName(context)
+                                    val greeting = if (phrase.startsWith(userTitle) || phrase.startsWith("जी $userTitle") || phrase.startsWith("नमस्ते")) phrase else "$userTitle, $phrase"
+                                    voiceManager.speak(greeting)
                                 }
+                            },
+                            onNavigateToScreen = { targetScreen ->
+                                currentScreen = targetScreen
                             }
                         )
                     }

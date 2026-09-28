@@ -11,9 +11,11 @@ object VoicePreferences {
     private const val KEY_PERSONA_ID = "voice_persona_id"
     private const val KEY_SPEECH_RATE = "voice_speech_rate"
     private const val KEY_SPEECH_PITCH = "voice_speech_pitch"
+    private const val KEY_VOICE_GENDER = "voice_gender_selected"
     private const val KEY_VOICE_OUTPUT_ENABLED = "voice_output_enabled"
     private const val KEY_AUTO_READ_ENABLED = "auto_read_messages_enabled"
     private const val KEY_CUSTOM_WAKE_WORD = "custom_wake_word"
+    private const val KEY_CUSTOM_USER_NAME = "custom_user_name"
     private const val KEY_SPAM_BLOCK_ENABLED = "spam_block_enabled"
     private const val KEY_WHATSAPP_AUTO_REPLY = "whatsapp_auto_reply_enabled"
     private const val KEY_WHATSAPP_REPLY_TEXT = "whatsapp_reply_text"
@@ -32,6 +34,15 @@ object VoicePreferences {
     fun saveCustomWakeWord(context: Context, wakeWord: String) {
         val word = if (wakeWord.isBlank()) "स्नेहा" else wakeWord.trim()
         getPrefs(context).edit().putString(KEY_CUSTOM_WAKE_WORD, word).apply()
+    }
+
+    fun getUserName(context: Context): String {
+        return getPrefs(context).getString(KEY_CUSTOM_USER_NAME, "मास्टर") ?: "मास्टर"
+    }
+
+    fun saveUserName(context: Context, userName: String) {
+        val name = if (userName.isBlank()) "मास्टर" else userName.trim()
+        getPrefs(context).edit().putString(KEY_CUSTOM_USER_NAME, name).apply()
     }
 
     fun isSpamBlockEnabled(context: Context): Boolean {
@@ -107,13 +118,21 @@ object VoicePreferences {
     }
 
     fun getSpeechPitch(context: Context): Float {
-        return getPrefs(context).getFloat(KEY_SPEECH_PITCH, 1.05f)
+        return getPrefs(context).getFloat(KEY_SPEECH_PITCH, 1.18f)
     }
 
     fun saveSpeechPitch(context: Context, pitch: Float) {
         getPrefs(context).edit()
             .putFloat(KEY_SPEECH_PITCH, pitch)
             .apply()
+    }
+
+    fun getVoiceGender(context: Context): String {
+        return getPrefs(context).getString(KEY_VOICE_GENDER, "FEMALE") ?: "FEMALE"
+    }
+
+    fun saveVoiceGender(context: Context, gender: String) {
+        getPrefs(context).edit().putString(KEY_VOICE_GENDER, gender).apply()
     }
 
     fun isVoiceOutputEnabled(context: Context): Boolean {

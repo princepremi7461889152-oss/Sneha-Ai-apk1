@@ -19,8 +19,36 @@ object SecurityUnlockPreferences {
     private const val KEY_VOICE_UNLOCK_ENABLED = "voice_unlock_enabled"
     private const val KEY_LOCKSCREEN_GUARD_ACTIVE = "lockscreen_guard_active"
 
+    private const val KEY_PIN_LENGTH = "saved_pin_length"
+    private const val KEY_BIOMETRIC_CONNECTOR = "biometric_connector_enabled"
+    private const val KEY_APP_LOCK_ENABLED = "app_lock_enabled"
+
     private fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    }
+
+    fun isAppLockEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_APP_LOCK_ENABLED, false)
+    }
+
+    fun saveAppLockEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_APP_LOCK_ENABLED, enabled).apply()
+    }
+
+    fun getPinLength(context: Context): Int {
+        return getPrefs(context).getInt(KEY_PIN_LENGTH, 4)
+    }
+
+    fun savePinLength(context: Context, length: Int) {
+        getPrefs(context).edit().putInt(KEY_PIN_LENGTH, length).apply()
+    }
+
+    fun isBiometricConnectorEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_BIOMETRIC_CONNECTOR, true)
+    }
+
+    fun saveBiometricConnectorEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_BIOMETRIC_CONNECTOR, enabled).apply()
     }
 
     fun getUnlockType(context: Context): UnlockType {

@@ -484,7 +484,7 @@ fun CallAssistantScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Simulator Card for Testing
+        // Real-time Phone Call Status Monitor
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = SnehaDarkSurface),
@@ -492,35 +492,27 @@ fun CallAssistantScreen(
             shape = RoundedCornerShape(16.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "🧪 कॉल सिमुलेटर (Test Emulator Call)",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = SnehaCyan
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .background(SnehaGreen, CircleShape)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "📡 रियल-टाइम फ़ोन कॉल डिटेक्टर सक्रिय",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SnehaGreen
+                    )
+                }
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "ब्राउज़र एमुलेटर या बिना सिम के टेस्ट करने के लिए नीचे टैप करें। इसके बाद बोलें: 'स्नेहा कॉल पिक करके बोलो कि मैं क्लास में हूँ'।",
+                    text = "जब भी आपके फ़ोन पर किसी का भी कॉल आएगा (जैसे पापा, मम्मी या कोई मित्र), स्नेहा तुरंत उनका असली नाम संपर्क सूची से पहचानकर स्क्रीन पर दिखाएगी और बोलकर बताएगी।",
                     fontSize = 12.sp,
                     color = SnehaTextSecondary,
                     lineHeight = 17.sp
                 )
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Button(
-                    onClick = {
-                        CallAssistantManager.triggerSimulatedIncomingCall("प्रोफेसर वर्मा (+91 94321-78900)")
-                        onSpeakAnnouncement("मास्टर, प्रोफेसर वर्मा की कॉल आ रही है!")
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("btn_trigger_simulated_call"),
-                    colors = ButtonDefaults.buttonColors(containerColor = SnehaPurple)
-                ) {
-                    Icon(imageVector = Icons.Default.Call, contentDescription = null, tint = Color.White)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("नकली इनकमिंग कॉल ट्रिगर करें", color = Color.White, fontWeight = FontWeight.Bold)
-                }
             }
         }
 

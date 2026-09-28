@@ -52,10 +52,34 @@ class SnehaVoiceService : Service() {
         const val ACTION_TRIGGER_SOS = "com.example.sneha.TRIGGER_SOS"
         const val ACTION_READ_MESSAGES = "com.example.sneha.READ_MESSAGES"
         const val ACTION_START_SCREEN_SHARE = "com.example.sneha.START_SCREEN_SHARE"
+        const val ACTION_PAUSE_FOR_FOREGROUND = "com.example.sneha.PAUSE_FOR_FOREGROUND"
+        const val ACTION_RESUME_FROM_FOREGROUND = "com.example.sneha.RESUME_FROM_FOREGROUND"
 
         const val EXTRA_START_MIC = "extra_start_mic"
         const val EXTRA_TRIGGER_SOS = "extra_trigger_sos"
         const val EXTRA_SCREEN_SHARE = "extra_screen_share"
+
+        fun pauseListeningForForeground(context: Context) {
+            try {
+                val intent = Intent(context, SnehaVoiceService::class.java).apply {
+                    action = ACTION_PAUSE_FOR_FOREGROUND
+                }
+                context.startService(intent)
+            } catch (ignored: Exception) {}
+        }
+
+        fun resumeListeningFromForeground(context: Context) {
+            val hasMicPermission = ContextCompat.checkSelfPermission(
+                context, Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!hasMicPermission) return
+            try {
+                val intent = Intent(context, SnehaVoiceService::class.java).apply {
+                    action = ACTION_RESUME_FROM_FOREGROUND
+                }
+                context.startService(intent)
+            } catch (ignored: Exception) {}
+        }
 
         fun startService(context: Context) {
             val hasMicPermission = ContextCompat.checkSelfPermission(
@@ -110,6 +134,19 @@ class SnehaVoiceService : Service() {
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return START_NOT_STICKY
+            }
+            ACTION_PAUSE_FOR_FOREGROUND -> {
+                stopWakeWordListening()
+                return START_STICKY
+            }
+            ACTION_RESUME_FROM_FOREGROUND -> {
+                val hasMicPermission = ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.RECORD_AUDIO
+                ) == PackageManager.PERMISSION_GRANTED
+                if (hasMicPermission && !isListeningForWakeWord) {
+                    startWakeWordListening()
+                }
+                return START_STICKY
             }
             ACTION_READ_MESSAGES -> {
                 readRecentMessagesAloud()

@@ -290,14 +290,15 @@ fun WhatsAppAutoReplyScreen(
                     ) {
                         Button(
                             onClick = {
-                                // Simulate an incoming WhatsApp message and verify auto-reply
+                                val now = java.time.LocalTime.now()
+                                val timeStr = "${now.hour}:${String.format("%02d", now.minute)}"
                                 val testLog = WhatsAppAutoReplyLog(
                                     senderName = "विकास वर्मा",
                                     incomingMessage = "भाई क्या हाल है? फ्री है क्या?",
                                     repliedText = replyText,
-                                    time = "अभी टेस्ट"
+                                    time = "अभी, $timeStr"
                                 )
-                                WhatsAppManager.clearLogs()
+                                WhatsAppManager.addReplyLog(context, testLog)
                                 onSpeakAnnouncement("व्हाट्सएप टेस्ट: विकास को ऑटो-रिप्लाई भेज दिया गया है!")
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366)),
@@ -340,52 +341,96 @@ fun WhatsAppAutoReplyScreen(
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp
                 )
-                Text(
-                    text = "${replyLogs.size} संदेश",
-                    color = SnehaTextSecondary,
-                    fontSize = 12.sp
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "${replyLogs.size} संदेश",
+                        color = SnehaTextSecondary,
+                        fontSize = 12.sp
+                    )
+                    if (replyLogs.isNotEmpty()) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        androidx.compose.material3.TextButton(
+                            onClick = { WhatsAppManager.clearLogs(context) },
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                        ) {
+                            Text("साफ़ करें", color = SnehaCyan, fontSize = 11.sp)
+                        }
+                    }
+                }
             }
         }
 
         // History items
-        items(replyLogs) { log ->
-            Card(
-                colors = CardDefaults.cardColors(containerColor = SnehaDarkSurface),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+        if (replyLogs.isEmpty()) {
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = SnehaDarkSurface),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        Text("📭", fontSize = 28.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = log.senderName,
-                            color = SnehaCyan,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
+                            text = "अभी तक कोई ऑटो-रिप्लाई नहीं भेजा गया",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = SnehaTextPrimary
                         )
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = log.time,
+                            text = "जब भी व्हाट्सएप पर किसी का असली मैसेज आएगा, स्नेहा खुद रिप्लाई करके उसका रियल-टाइम रिकॉर्ड यहाँ दर्ज करेगी।",
+                            fontSize = 12.sp,
                             color = SnehaTextSecondary,
-                            fontSize = 11.sp
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                     }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "आया संदेश: \"${log.incomingMessage}\"",
-                        color = SnehaTextPrimary,
-                        fontSize = 12.sp
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "स्नेहा ने भेजा: \"${log.repliedText}\"",
-                        color = Color(0xFF25D366),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                }
+            }
+        } else {
+            items(replyLogs) { log ->
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = SnehaDarkSurface),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = log.senderName,
+                                color = SnehaCyan,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                text = log.time,
+                                color = SnehaTextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "आया संदेश: \"${log.incomingMessage}\"",
+                            color = SnehaTextPrimary,
+                            fontSize = 12.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "स्नेहा ने भेजा: \"${log.repliedText}\"",
+                            color = Color(0xFF25D366),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
             }
         }

@@ -53,8 +53,51 @@ object BackgroundSpeaker : TextToSpeech.OnInitListener {
                     textToSpeech?.setLanguage(Locale.getDefault())
                 }
             }
+
+            try {
+                val availableVoices = textToSpeech?.voices
+                if (!availableVoices.isNullOrEmpty()) {
+                    fun isFemale(name: String): Boolean {
+                        val n = name.lowercase()
+                        val isExplicitMale = (n.contains("male") && !n.contains("female")) ||
+                                n.contains("man") ||
+                                n.contains("-hie") ||
+                                n.contains("#male") ||
+                                n.contains("_male")
+                        if (isExplicitMale) return false
+                        return n.contains("female") ||
+                                n.contains("woman") ||
+                                n.contains("f00") ||
+                                n.contains("-hid") ||
+                                n.contains("-hia") ||
+                                n.contains("-hic") ||
+                                n.contains("-cfn") ||
+                                n.contains("zira") ||
+                                n.contains("eva")
+                    }
+
+                    val bestFemaleVoice = availableVoices.firstOrNull { v ->
+                        v.locale.language == "hi" && isFemale(v.name)
+                    } ?: availableVoices.firstOrNull { v ->
+                        v.locale.country.equals("IN", ignoreCase = true) && isFemale(v.name)
+                    } ?: availableVoices.firstOrNull { v ->
+                        isFemale(v.name)
+                    } ?: availableVoices.firstOrNull { v ->
+                        val n = v.name.lowercase()
+                        v.locale.language == "hi" && !((n.contains("male") && !n.contains("female")) || n.contains("-hie") || n.contains("man"))
+                    }
+
+                    if (bestFemaleVoice != null) {
+                        textToSpeech?.voice = bestFemaleVoice
+                        Log.d(TAG, "Selected female background TTS voice: ${bestFemaleVoice.name}")
+                    }
+                }
+            } catch (ignored: Exception) {}
+
+            val effectivePitch = if (speechPitch < 1.05f) 1.18f else speechPitch
+            speechPitch = effectivePitch
             textToSpeech?.setSpeechRate(speechRate)
-            textToSpeech?.setPitch(speechPitch)
+            textToSpeech?.setPitch(effectivePitch)
 
             textToSpeech?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {

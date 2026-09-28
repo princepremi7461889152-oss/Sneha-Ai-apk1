@@ -1,5 +1,10 @@
 package com.example.ui.screens
 
+import android.app.Activity
+import android.content.Intent
+import android.speech.RecognizerIntent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,7 +20,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
@@ -36,6 +40,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -84,6 +89,54 @@ fun LiveCallTranslatorScreen(
     val sourceLangObj = languages.firstOrNull { it.code == sourceLang } ?: languages[0]
     val targetLangObj = languages.firstOrNull { it.code == targetLang } ?: languages[1]
 
+    // Speech recognition launcher for Master
+    val masterSpeechLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val spokenList = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            val spoken = spokenList?.firstOrNull()?.trim() ?: ""
+            if (spoken.isNotBlank()) {
+                scope.launch {
+                    isTranslating = true
+                    val trans = CallTranslatorManager.translateText(
+                        text = spoken,
+                        fromLang = sourceLang,
+                        toLang = targetLang,
+                        isUser = true,
+                        context = context
+                    )
+                    isTranslating = false
+                    onSpeak(trans)
+                }
+            }
+        }
+    }
+
+    // Speech recognition launcher for Caller
+    val callerSpeechLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val spokenList = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            val spoken = spokenList?.firstOrNull()?.trim() ?: ""
+            if (spoken.isNotBlank()) {
+                scope.launch {
+                    isTranslating = true
+                    val trans = CallTranslatorManager.translateText(
+                        text = spoken,
+                        fromLang = targetLang,
+                        toLang = sourceLang,
+                        isUser = false,
+                        context = context
+                    )
+                    isTranslating = false
+                    onSpeak(trans)
+                }
+            }
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -101,21 +154,33 @@ fun LiveCallTranslatorScreen(
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Translate,
-                        contentDescription = "Translate",
-                        tint = SnehaCyan,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "कॉल के दौरान लाइव ट्रांसलेटर",
-                        color = SnehaTextPrimary,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Translate,
+                            contentDescription = "Translate",
+                            tint = SnehaCyan,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "कॉल के दौरान लाइव ट्रांसलेटर",
+                            color = SnehaTextPrimary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    }
+
+                    if (translations.isNotEmpty()) {
+                        TextButton(
+                            onClick = { CallTranslatorManager.clearHistory(context) },
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text("साफ़ करें", color = SnehaCyan, fontSize = 11.sp)
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -216,24 +281,51 @@ fun LiveCallTranslatorScreen(
             // Master Button (Hindi -> English)
             Button(
                 onClick = {
-                    scope.launch {
-                        isTranslating = true
-                        val translated = CallTranslatorManager.translateText(
-                            text = if (manualInput.isNotBlank()) manualInput else "नमस्ते, मैं बाद में कॉल करता हूँ।",
-                            fromLang = sourceLang,
-                            toLang = targetLang,
-                            isUser = true
-                        )
-                        isTranslating = false
-                        manualInput = ""
-                        onSpeak(translated)
+                    if (manualInput.isNotBlank()) {
+                        scope.launch {
+                            isTranslating = true
+                            val translated = CallTranslatorManager.translateText(
+                                text = manualInput,
+                                fromLang = sourceLang,
+                                toLang = targetLang,
+                                isUser = true,
+                                context = context
+                            )
+                            isTranslating = false
+                            manualInput = ""
+                            onSpeak(translated)
+                        }
+                    } else {
+                        // Start speech recognition for Master
+                        try {
+                            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                putExtra(RecognizerIntent.EXTRA_LANGUAGE, if (sourceLang == "hi") "hi-IN" else sourceLang)
+                                putExtra(RecognizerIntent.EXTRA_PROMPT, "मास्टर, बोलिए (${sourceLangObj.nameHindi})...")
+                            }
+                            masterSpeechLauncher.launch(intent)
+                        } catch (e: Exception) {
+                            // Fallback to phrase translation
+                            scope.launch {
+                                isTranslating = true
+                                val translated = CallTranslatorManager.translateText(
+                                    text = "मैं अभी कॉलेज की लाइब्रेरी में हूँ।",
+                                    fromLang = sourceLang,
+                                    toLang = targetLang,
+                                    isUser = true,
+                                    context = context
+                                )
+                                isTranslating = false
+                                onSpeak(translated)
+                            }
+                        }
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = SnehaCyan),
                 shape = RoundedCornerShape(14.dp),
                 modifier = Modifier
                     .weight(1f)
-                    .height(52.dp)
+                    .height(54.dp)
                     .testTag("master_speak_translate_button")
             ) {
                 Icon(Icons.Default.Mic, contentDescription = null, tint = Color.Black)
@@ -247,24 +339,51 @@ fun LiveCallTranslatorScreen(
             // Caller Button (English -> Hindi)
             Button(
                 onClick = {
-                    scope.launch {
-                        isTranslating = true
-                        val translated = CallTranslatorManager.translateText(
-                            text = if (manualInput.isNotBlank()) manualInput else "Please send the file as soon as possible.",
-                            fromLang = targetLang,
-                            toLang = sourceLang,
-                            isUser = false
-                        )
-                        isTranslating = false
-                        manualInput = ""
-                        onSpeak(translated)
+                    if (manualInput.isNotBlank()) {
+                        scope.launch {
+                            isTranslating = true
+                            val translated = CallTranslatorManager.translateText(
+                                text = manualInput,
+                                fromLang = targetLang,
+                                toLang = sourceLang,
+                                isUser = false,
+                                context = context
+                            )
+                            isTranslating = false
+                            manualInput = ""
+                            onSpeak(translated)
+                        }
+                    } else {
+                        // Start speech recognition for Caller
+                        try {
+                            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                putExtra(RecognizerIntent.EXTRA_LANGUAGE, if (targetLang == "en") "en-US" else targetLang)
+                                putExtra(RecognizerIntent.EXTRA_PROMPT, "Caller speaking (${targetLangObj.nameEnglish})...")
+                            }
+                            callerSpeechLauncher.launch(intent)
+                        } catch (e: Exception) {
+                            // Fallback to phrase translation
+                            scope.launch {
+                                isTranslating = true
+                                val translated = CallTranslatorManager.translateText(
+                                    text = "Hello, where are you right now?",
+                                    fromLang = targetLang,
+                                    toLang = sourceLang,
+                                    isUser = false,
+                                    context = context
+                                )
+                                isTranslating = false
+                                onSpeak(translated)
+                            }
+                        }
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = SnehaPink),
                 shape = RoundedCornerShape(14.dp),
                 modifier = Modifier
                     .weight(1f)
-                    .height(52.dp)
+                    .height(54.dp)
                     .testTag("caller_speak_translate_button")
             ) {
                 Icon(Icons.Default.RecordVoiceOver, contentDescription = null, tint = Color.White)
@@ -305,7 +424,11 @@ fun LiveCallTranslatorScreen(
                     if (manualInput.isNotBlank()) {
                         scope.launch {
                             val trans = CallTranslatorManager.translateText(
-                                manualInput, sourceLang, targetLang, true
+                                text = manualInput,
+                                fromLang = sourceLang,
+                                toLang = targetLang,
+                                isUser = true,
+                                context = context
                             )
                             manualInput = ""
                             onSpeak(trans)

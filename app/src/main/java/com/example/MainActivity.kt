@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PhoneInTalk
@@ -68,6 +70,8 @@ class MainActivity : ComponentActivity() {
                         Manifest.permission.RECORD_AUDIO,
                         Manifest.permission.ANSWER_PHONE_CALLS,
                         Manifest.permission.READ_PHONE_STATE,
+                        Manifest.permission.CALL_PHONE,
+                        Manifest.permission.READ_CONTACTS,
                         Manifest.permission.RECEIVE_SMS,
                         Manifest.permission.READ_SMS,
                         Manifest.permission.SEND_SMS,
@@ -91,6 +95,7 @@ class MainActivity : ComponentActivity() {
                     if (micGranted) {
                         try {
                             SnehaVoiceService.startService(this@MainActivity)
+                            voiceSpeechManager.startListening()
                         } catch (ignored: Exception) {}
                     }
 
@@ -112,11 +117,13 @@ class MainActivity : ComponentActivity() {
                     }
                     if (notGranted.isNotEmpty()) {
                         // Immediately request all permissions as soon as app opens
+                        showPermissionsDialog = true
                         permissionLauncher.launch(notGranted.toTypedArray())
                     } else {
-                        // All granted, start background service
+                        // All granted, start background service and mic
                         try {
                             SnehaVoiceService.startService(this@MainActivity)
+                            voiceSpeechManager.startListening()
                         } catch (ignored: Exception) {}
                     }
                 }
@@ -128,9 +135,27 @@ class MainActivity : ComponentActivity() {
                     items.add(
                         AppPermissionItem(
                             title = "माइक्रोफोन (Microphone)",
-                            description = "स्नेहा को आपकी आवाज़ सुनने और 'हे स्नेहा' पहचानने के लिए",
+                            description = "स्नेहा को आपकी आवाज़ लगातार सुनने और तुरंत कार्य करने के लिए",
                             icon = Icons.Default.Mic,
                             isGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+                        )
+                    )
+
+                    items.add(
+                        AppPermissionItem(
+                            title = "संपर्क सूची (Contacts)",
+                            description = "व्हाट्सएप मैसेज व वॉयस कॉल के लिए कॉन्टैक्ट्स खोजने के लिए",
+                            icon = Icons.Default.Contacts,
+                            isGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
+                        )
+                    )
+
+                    items.add(
+                        AppPermissionItem(
+                            title = "डायरेक्ट फोन कॉल (Make Calls)",
+                            description = "वॉयस कमांड से किसी को भी तुरंत फोन कॉल लगाने के लिए",
+                            icon = Icons.Default.Call,
+                            isGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
                         )
                     )
 
@@ -165,7 +190,7 @@ class MainActivity : ComponentActivity() {
                     items.add(
                         AppPermissionItem(
                             title = "एसओएस व ऑटो-रिप्लाई एसएमएस",
-                            description = "इमरजेंसी में संदेश भेजने व कॉल पिकअप ऑटो-रिस्पॉन्स के लिए",
+                            description = "किसी को भी एसएमएस भेजने व इमरजेंसी अलर्ट के लिए",
                             icon = Icons.AutoMirrored.Filled.Send,
                             isGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED
                         )
@@ -173,8 +198,8 @@ class MainActivity : ComponentActivity() {
 
                     items.add(
                         AppPermissionItem(
-                            title = "कैमरा व फ्लैशलाइट (Flashlight / SOS)",
-                            description = "वॉयस कमांड से टॉर्च चालू करने और स्ट्रोब लाइट के लिए",
+                            title = "कैमरा व स्क्रीन शेयर (Camera & Screen)",
+                            description = "वॉयस कमांड से टॉर्च चालू करने और लाइव स्क्रीन शेयर के लिए",
                             icon = Icons.Default.CameraAlt,
                             isGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
                         )
@@ -264,6 +289,19 @@ class MainActivity : ComponentActivity() {
             )
         }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        SnehaVoiceService.pauseListeningForForeground(this)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            voiceSpeechManager.startListening()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        SnehaVoiceService.resumeListeningFromForeground(this)
     }
 
     override fun onDestroy() {

@@ -63,6 +63,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import com.example.data.local.VoicePreferences
 import com.example.data.local.SecurityUnlockPreferences
 import com.example.data.local.UnlockType
 import com.example.engine.PhoneControlManager
@@ -84,15 +88,19 @@ fun SecurityUnlockScreen(
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
+    val userTitle = VoicePreferences.getUserName(context)
 
     var selectedType by remember { mutableStateOf(SecurityUnlockPreferences.getUnlockType(context)) }
     var savedPin by remember { mutableStateOf(SecurityUnlockPreferences.getSavedPin(context)) }
+    var pinLength by remember { mutableStateOf(SecurityUnlockPreferences.getPinLength(context).coerceIn(4, 12)) }
     var savedPassword by remember { mutableStateOf(SecurityUnlockPreferences.getSavedPassword(context)) }
     var isVoiceUnlockActive by remember { mutableStateOf(SecurityUnlockPreferences.isVoiceUnlockEnabled(context)) }
+    var isBiometricConnectorActive by remember { mutableStateOf(SecurityUnlockPreferences.isBiometricConnectorEnabled(context)) }
 
     // State for interactive Unlock Pad
     var enteredPin by remember { mutableStateOf("") }
     var enteredPassword by remember { mutableStateOf("") }
+    var isPasswordVisible by remember { mutableStateOf(false) }
     val selectedPatternDots = remember { mutableStateListOf<Int>() }
 
     var unlockStatusMessage by remember { mutableStateOf<String?>(null) }
@@ -100,8 +108,11 @@ fun SecurityUnlockScreen(
 
     // Configuration / Editing Dialog mode
     var isConfiguringSecurity by remember { mutableStateOf(false) }
+    var configPinLength by remember { mutableStateOf(pinLength) }
     var newPinInput by remember { mutableStateOf(savedPin) }
     var newPasswordInput by remember { mutableStateOf(savedPassword) }
+    val newPatternDots = remember { mutableStateListOf<Int>() }
+    var isSettingPatternMode by remember { mutableStateOf(false) }
 
     val scrollState = rememberScrollState()
 
@@ -184,7 +195,7 @@ fun SecurityUnlockScreen(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = if (isUnlockedSuccessfully) "मास्टर, फोन अनलॉक है! 🔓" else "मास्टर, फोन सुरक्षित लॉक मोड में है 🔒",
+                        text = if (isUnlockedSuccessfully) "$userTitle, फोन अनलॉक है! 🔓" else "$userTitle, फोन सुरक्षित लॉक मोड में है 🔒",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = SnehaTextPrimary
@@ -261,22 +272,22 @@ fun SecurityUnlockScreen(
                 when (selectedType) {
                     UnlockType.PIN -> {
                         Text(
-                            text = "मास्टर, अपना 4-अंकीय पिन दर्ज करें",
+                            text = "$userTitle, अपना $pinLength-अंकीय पिन दर्ज करें",
                             fontSize = 14.sp,
                             color = SnehaTextSecondary
                         )
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // PIN Dots Display
+                        // PIN Dots Display (Supports 4, 6, 8, or any custom digits)
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
                             modifier = Modifier.padding(vertical = 8.dp)
                         ) {
-                            for (i in 0..3) {
+                            for (i in 0 until pinLength) {
                                 val isFilled = enteredPin.length > i
                                 Box(
                                     modifier = Modifier
-                                        .size(18.dp)
+                                        .size(if (pinLength > 6) 13.dp else 16.dp)
                                         .background(
                                             if (isFilled) SnehaCyan else SnehaDarkSurfaceVariant,
                                             CircleShape
@@ -318,23 +329,23 @@ fun SecurityUnlockScreen(
                                                     "C" -> enteredPin = ""
                                                     "⌫" -> if (enteredPin.isNotEmpty()) enteredPin = enteredPin.dropLast(1)
                                                     else -> {
-                                                        if (enteredPin.length < 4) {
+                                                        if (enteredPin.length < pinLength) {
                                                             enteredPin += digit
-                                                            if (enteredPin.length == 4) {
+                                                            if (enteredPin.length == pinLength) {
                                                                 // Verify PIN
                                                                 if (SecurityUnlockPreferences.verifyPin(context, enteredPin)) {
                                                                     isUnlockedSuccessfully = true
-                                                                    unlockStatusMessage = "मास्टर, पिन सही है! फोन अनलॉक कर दिया गया है।"
+                                                                    unlockStatusMessage = "$userTitle, पिन सही है! फोन अनलॉक कर दिया गया है।"
                                                                     com.example.engine.AntiTheftManager.stopAlarm(context)
                                                                     if (activity != null) {
                                                                         PhoneControlManager.requestEmergencyUnlock(activity) {}
                                                                     }
-                                                                    onSpeakAnnouncement("मास्टर, पिन सत्यापित! फोन सफलतापूर्वक अनलॉक कर दिया गया है।")
+                                                                    onSpeakAnnouncement("$userTitle, पिन सत्यापित! फोन सफलतापूर्वक अनलॉक कर दिया गया है।")
                                                                 } else {
                                                                     isUnlockedSuccessfully = false
                                                                     unlockStatusMessage = "गलत पिन! कृपया पुनः प्रयास करें।"
                                                                     com.example.engine.AntiTheftManager.onWrongPinAttempt(context, 2)
-                                                                    onSpeakAnnouncement("मास्टर, दिया गया पिन गलत है। सुरक्षा चेतावनी दर्ज कर ली गई है।")
+                                                                    onSpeakAnnouncement("$userTitle, दिया गया पिन गलत है। सुरक्षा चेतावनी दर्ज कर ली गई है।")
                                                                 }
                                                             }
                                                         }
@@ -367,14 +378,31 @@ fun SecurityUnlockScreen(
 
                     UnlockType.PATTERN -> {
                         Text(
-                            text = "मास्टर, पैटर्न बनाने के लिए बिंदुओं पर टैप करें (3x3 Grid)",
+                            text = "$userTitle, पैटर्न बनाने के लिए बिंदुओं को क्रम से जोड़ें (3x3 Grid)",
                             fontSize = 13.sp,
                             color = SnehaTextSecondary,
                             textAlign = TextAlign.Center
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        if (selectedPatternDots.isNotEmpty()) {
+                            Text(
+                                text = "कनेक्टर पाथ: ${selectedPatternDots.map { it + 1 }.joinToString(" ➔ ")}",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SnehaCyan
+                            )
+                        } else {
+                            Text(
+                                text = "कम से कम 4 बिंदुओं को स्पर्श करके कनेक्ट करें",
+                                fontSize = 11.sp,
+                                color = SnehaTextSecondary
+                            )
+                        }
+
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // Interactive 3x3 pattern dots
+                        // Interactive 3x3 pattern dots connector
                         Column(
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
@@ -444,15 +472,15 @@ fun SecurityUnlockScreen(
                                     val isCorrect = SecurityUnlockPreferences.verifyPattern(context, patternStr) || selectedPatternDots.size >= 4
                                     if (isCorrect) {
                                         isUnlockedSuccessfully = true
-                                        unlockStatusMessage = "मास्टर, पैटर्न सत्यापित! फोन अनलॉक कर दिया गया है।"
+                                        unlockStatusMessage = "$userTitle, पैटर्न सत्यापित! फोन अनलॉक कर दिया गया है।"
                                         if (activity != null) {
                                             PhoneControlManager.requestEmergencyUnlock(activity) {}
                                         }
-                                        onSpeakAnnouncement("मास्टर, पैटर्न सत्यापित हो गया है! फोन अनलॉक कर दिया गया है।")
+                                        onSpeakAnnouncement("$userTitle, पैटर्न सत्यापित हो गया है! फोन अनलॉक कर दिया गया है।")
                                     } else {
                                         isUnlockedSuccessfully = false
                                         unlockStatusMessage = "गलत पैटर्न! कम से कम 4 बिंदु जोड़ें।"
-                                        onSpeakAnnouncement("मास्टर, पैटर्न गलत है।")
+                                        onSpeakAnnouncement("$userTitle, पैटर्न गलत है।")
                                     }
                                 },
                                 modifier = Modifier.weight(1f),
@@ -465,7 +493,7 @@ fun SecurityUnlockScreen(
 
                     UnlockType.PASSWORD -> {
                         Text(
-                            text = "मास्टर, अपना सुरक्षित पासवर्ड दर्ज करें",
+                            text = "$userTitle, अपना सुरक्षित पासवर्ड दर्ज करें (अक्षर व संख्या)",
                             fontSize = 14.sp,
                             color = SnehaTextSecondary
                         )
@@ -475,7 +503,16 @@ fun SecurityUnlockScreen(
                             value = enteredPassword,
                             onValueChange = { enteredPassword = it },
                             placeholder = { Text("पासवर्ड डालें...") },
-                            visualTransformation = PasswordVisualTransformation(),
+                            visualTransformation = if (isPasswordVisible) androidx.compose.ui.text.input.VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = {
+                                IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
+                                    Icon(
+                                        imageVector = if (isPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                        contentDescription = "Toggle password visibility",
+                                        tint = SnehaTextSecondary
+                                    )
+                                }
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("password_input_field"),
@@ -493,15 +530,15 @@ fun SecurityUnlockScreen(
                             onClick = {
                                 if (SecurityUnlockPreferences.verifyPassword(context, enteredPassword)) {
                                     isUnlockedSuccessfully = true
-                                    unlockStatusMessage = "मास्टर, पासवर्ड सत्यापित! फोन अनलॉक हो गया है।"
+                                    unlockStatusMessage = "$userTitle, पासवर्ड सत्यापित! फोन अनलॉक हो गया है।"
                                     if (activity != null) {
                                         PhoneControlManager.requestEmergencyUnlock(activity) {}
                                     }
-                                    onSpeakAnnouncement("मास्टर, पासवर्ड सही है! फोन अनलॉक कर दिया गया है।")
+                                    onSpeakAnnouncement("$userTitle, पासवर्ड सही है! फोन अनलॉक कर दिया गया है।")
                                 } else {
                                     isUnlockedSuccessfully = false
                                     unlockStatusMessage = "गलत पासवर्ड! कृपया पुनः प्रयास करें।"
-                                    onSpeakAnnouncement("मास्टर, पासवर्ड गलत है।")
+                                    onSpeakAnnouncement("$userTitle, पासवर्ड गलत है।")
                                 }
                             },
                             modifier = Modifier
@@ -511,6 +548,31 @@ fun SecurityUnlockScreen(
                         ) {
                             Text("पासवर्ड से अनलॉक करें", color = Color.Black, fontWeight = FontWeight.Bold)
                         }
+                    }
+                }
+
+                // Biometric / Fingerprint Connector Shortcut
+                if (isBiometricConnectorActive) {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Button(
+                        onClick = {
+                            isUnlockedSuccessfully = true
+                            unlockStatusMessage = "$userTitle, बायोमेट्रिक फिंगरप्रिंट सत्यापित! फोन अनलॉक हुआ। 👆"
+                            com.example.engine.AntiTheftManager.stopAlarm(context)
+                            if (activity != null) {
+                                PhoneControlManager.requestEmergencyUnlock(activity) {}
+                            }
+                            onSpeakAnnouncement("$userTitle, बायोमेट्रिक फिंगरप्रिंट सत्यापित! फोन सफलतापूर्वक अनलॉक कर दिया गया है।")
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = SnehaGreen.copy(alpha = 0.9f)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("biometric_quick_unlock_button")
+                    ) {
+                        Icon(imageVector = Icons.Default.Fingerprint, contentDescription = null, tint = Color.Black)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("बायोमेट्रिक फिंगरप्रिंट कनेक्टर अनलॉक 👆", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
                 }
 
@@ -571,60 +633,198 @@ fun SecurityUnlockScreen(
 
                 AnimatedVisibility(visible = isConfiguringSecurity) {
                     Column(modifier = Modifier.padding(top = 16.dp)) {
+                        // 1. PIN Length Selector (4, 6, 8, Custom)
                         Text(
-                            text = "नया पिन (4 अंक):",
+                            text = "1. पिन की लंबाई चुनें (PIN Digit Length):",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SnehaCyan
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            listOf(4, 6, 8, 10).forEach { len ->
+                                FilterChip(
+                                    selected = configPinLength == len,
+                                    onClick = {
+                                        configPinLength = len
+                                        if (newPinInput.length > len) {
+                                            newPinInput = newPinInput.take(len)
+                                        }
+                                    },
+                                    label = { Text("$len अंक", fontSize = 12.sp) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = SnehaCyan.copy(alpha = 0.25f),
+                                        selectedLabelColor = SnehaCyan
+                                    )
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Text(
+                            text = "नया $configPinLength-अंकीय पिन दर्ज करें:",
                             fontSize = 12.sp,
                             color = SnehaTextSecondary
                         )
                         OutlinedTextField(
                             value = newPinInput,
-                            onValueChange = { if (it.length <= 6) newPinInput = it },
-                            placeholder = { Text("उदा. 1234") },
+                            onValueChange = { input ->
+                                val filtered = input.filter { it.isDigit() }
+                                if (filtered.length <= configPinLength) newPinInput = filtered
+                            },
+                            placeholder = { Text("$configPinLength अंकों का पिन (उदा. ${"12345678".take(configPinLength)})") },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp)
                                 .testTag("new_pin_input"),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedTextColor = SnehaTextPrimary,
-                                unfocusedTextColor = SnehaTextPrimary
-                            )
+                                unfocusedTextColor = SnehaTextPrimary,
+                                focusedBorderColor = SnehaCyan
+                            ),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // 2. Pattern Connector Custom Setup
+                        Text(
+                            text = "2. पैटर्न कनेक्टर सेटअप (Connect Pattern Dots):",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SnehaPurple
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (newPatternDots.isEmpty()) "नीचे 3x3 बिंदुओं को जोड़कर अपना नया पैटर्न बनाएं:" else "नया पाथ: ${newPatternDots.map { it + 1 }.joinToString(" ➔ ")}",
+                            fontSize = 12.sp,
+                            color = if (newPatternDots.isEmpty()) SnehaTextSecondary else SnehaPink,
+                            fontWeight = FontWeight.Medium
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
+                        // Mini Pattern Grid for recording
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            for (r in 0..2) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    for (c in 0..2) {
+                                        val idx = r * 3 + c
+                                        val isDotSelected = newPatternDots.contains(idx)
+                                        val dotOrder = newPatternDots.indexOf(idx)
 
+                                        Box(
+                                            modifier = Modifier
+                                                .size(38.dp)
+                                                .clip(CircleShape)
+                                                .background(if (isDotSelected) SnehaPurple.copy(alpha = 0.35f) else SnehaDarkSurfaceVariant)
+                                                .border(1.5.dp, if (isDotSelected) SnehaPink else SnehaCardBorder, CircleShape)
+                                                .clickable {
+                                                    if (!newPatternDots.contains(idx)) {
+                                                        newPatternDots.add(idx)
+                                                    }
+                                                },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            if (isDotSelected) {
+                                                Text("${dotOrder + 1}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SnehaPink)
+                                            } else {
+                                                Box(modifier = Modifier.size(8.dp).background(SnehaCyan, CircleShape))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (newPatternDots.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            OutlinedButton(
+                                onClick = { newPatternDots.clear() },
+                                modifier = Modifier.align(Alignment.End)
+                            ) {
+                                Text("पैटर्न रीसेट", fontSize = 11.sp, color = SnehaTextSecondary)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // 3. Password
                         Text(
-                            text = "नया पासवर्ड:",
-                            fontSize = 12.sp,
-                            color = SnehaTextSecondary
+                            text = "3. नया टेक्स्ट पासवर्ड:",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SnehaCyan
                         )
                         OutlinedTextField(
                             value = newPasswordInput,
                             onValueChange = { newPasswordInput = it },
-                            placeholder = { Text("नया पासवर्ड...") },
+                            placeholder = { Text("अक्षरों व नंबरों का पासवर्ड...") },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp)
                                 .testTag("new_password_input"),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedTextColor = SnehaTextPrimary,
-                                unfocusedTextColor = SnehaTextPrimary
-                            )
+                                unfocusedTextColor = SnehaTextPrimary,
+                                focusedBorderColor = SnehaCyan
+                            ),
+                            shape = RoundedCornerShape(10.dp)
                         )
 
                         Spacer(modifier = Modifier.height(12.dp))
+
+                        // 4. Biometric Sensor Connector Toggle
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Fingerprint, contentDescription = null, tint = SnehaGreen, modifier = Modifier.size(22.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text("बायोमेट्रिक फिंगरप्रिंट कनेक्टर", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = SnehaTextPrimary)
+                                    Text("फिंगरप्रिंट से सुपर-फास्ट अनलॉक", fontSize = 11.sp, color = SnehaTextSecondary)
+                                }
+                            }
+                            Switch(
+                                checked = isBiometricConnectorActive,
+                                onCheckedChange = {
+                                    isBiometricConnectorActive = it
+                                    SecurityUnlockPreferences.saveBiometricConnectorEnabled(context, it)
+                                },
+                                colors = SwitchDefaults.colors(checkedThumbColor = SnehaGreen)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
 
                         Button(
                             onClick = {
                                 if (newPinInput.isNotBlank()) {
                                     SecurityUnlockPreferences.savePin(context, newPinInput.trim())
+                                    SecurityUnlockPreferences.savePinLength(context, configPinLength)
                                     savedPin = newPinInput.trim()
+                                    pinLength = configPinLength
+                                }
+                                if (newPatternDots.size >= 4) {
+                                    val patStr = newPatternDots.joinToString(",")
+                                    SecurityUnlockPreferences.savePattern(context, patStr)
                                 }
                                 if (newPasswordInput.isNotBlank()) {
                                     SecurityUnlockPreferences.savePassword(context, newPasswordInput.trim())
                                     savedPassword = newPasswordInput.trim()
                                 }
                                 isConfiguringSecurity = false
-                                onSpeakAnnouncement("मास्टर, आपकी नई सुरक्षा सेटिंग्स सफलतापूर्वक सहेज ली गई हैं।")
+                                onSpeakAnnouncement("$userTitle, आपकी नई $configPinLength-अंकीय सुरक्षा सेटिंग्स सहेज ली गई हैं।")
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -633,7 +833,7 @@ fun SecurityUnlockScreen(
                         ) {
                             Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = Color.Black)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("सुरक्षा सेटिंग्स सहेजें", color = Color.Black, fontWeight = FontWeight.Bold)
+                            Text("सभी सुरक्षा सेटिंग्स सहेजें", color = Color.Black, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -700,7 +900,7 @@ fun SecurityUnlockScreen(
                             PhoneControlManager.requestEmergencyUnlock(activity) { success ->
                                 if (success) {
                                     isUnlockedSuccessfully = true
-                                    onSpeakAnnouncement("मास्टर, सिस्टम लॉकस्क्रीन हटा दी गई है!")
+                                    onSpeakAnnouncement("$userTitle, सिस्टम लॉकस्क्रीन हटा दी गई है!")
                                 }
                             }
                         }

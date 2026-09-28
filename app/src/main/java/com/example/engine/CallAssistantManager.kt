@@ -89,7 +89,7 @@ object CallAssistantManager {
     private val _isCallRinging = MutableStateFlow(false)
     val isCallRinging: StateFlow<Boolean> = _isCallRinging.asStateFlow()
 
-    private val _currentCaller = MutableStateFlow("अज्ञात कॉलर (+91 98765-XXXXX)")
+    private val _currentCaller = MutableStateFlow("कोई सक्रिय कॉल नहीं")
     val currentCaller: StateFlow<String> = _currentCaller.asStateFlow()
 
     private val _isCallActive = MutableStateFlow(false)
@@ -104,17 +104,14 @@ object CallAssistantManager {
     private val _defaultAttendantMessage = MutableStateFlow("मास्टर अभी क्लास में हैं, कृपया बाद में कॉल करें।")
     val defaultAttendantMessage: StateFlow<String> = _defaultAttendantMessage.asStateFlow()
 
-    private val _callLogs = MutableStateFlow<List<CallLogEntry>>(
-        listOf(
-            CallLogEntry(
-                caller = "अमित शर्मा (+91 98112-34567)",
-                time = "आज, 10:15 AM",
-                messageSpoken = "नमस्ते, मास्टर अभी क्लास में हैं, वे आपसे बाद में संपर्क करेंगे।",
-                status = "स्नेहा ने कॉल अटेंड किया"
-            )
-        )
-    )
+    private val _callLogs = MutableStateFlow<List<CallLogEntry>>(emptyList())
     val callLogs: StateFlow<List<CallLogEntry>> = _callLogs.asStateFlow()
+
+    fun setRealIncomingCall(callerDisplayName: String) {
+        _currentCaller.value = callerDisplayName
+        _isCallRinging.value = true
+        _isCallActive.value = false
+    }
 
     fun setActiveVoiceAvatar(avatar: CallVoiceAvatar) {
         _activeVoiceAvatar.value = avatar

@@ -218,6 +218,80 @@ fun PermissionsDialog(
                             }
                         }
                     }
+
+                    // Special Screen Share / Floating Overlay Tile
+                    item {
+                        val hasOverlay = Settings.canDrawOverlays(context)
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = SnehaDarkSurfaceVariant),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(SnehaCyan.copy(alpha = 0.2f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CameraAlt,
+                                        contentDescription = null,
+                                        tint = SnehaCyan,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(12.dp))
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "स्क्रीन शेयर व फ्लोटिंग डिस्प्ले",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = SnehaTextPrimary
+                                    )
+                                    Text(
+                                        text = "रियल-टाइम स्क्रीन शेयरिंग व अन्य ऐप्स पर दिखने के लिए",
+                                        fontSize = 11.sp,
+                                        color = SnehaTextSecondary
+                                    )
+                                }
+
+                                if (hasOverlay) {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = "Granted",
+                                        tint = SnehaGreen,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                } else {
+                                    OutlinedButton(
+                                        onClick = {
+                                            try {
+                                                val intent = Intent(
+                                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                                    Uri.parse("package:${context.packageName}")
+                                                )
+                                                context.startActivity(intent)
+                                            } catch (e: Exception) {
+                                                context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))
+                                            }
+                                        },
+                                        modifier = Modifier.testTag("btn_grant_overlay_perm")
+                                    ) {
+                                        Text("चालू करें", fontSize = 11.sp, color = SnehaCyan)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))

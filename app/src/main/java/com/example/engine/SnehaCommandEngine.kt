@@ -25,15 +25,67 @@ object SnehaCommandEngine {
     ): CommandResult {
         val input = rawInput.trim()
         val lower = input.lowercase()
+        val userTitle = VoicePreferences.getUserName(context)
 
-        // 1. Calling by name / Wake words ("स्नेहा", "hey sneha", "सुनो स्नेहा", "siri")
+        // 1. Calling by name / Wake words ("स्नेहा", "hey sneha", "सुनो स्नेहा", "हेलो स्नेहा", "नमस्ते स्नेहा", etc.)
         val isJustCalling = lower == "स्नेहा" || lower == "sneha" || lower == "hey sneha" ||
                 lower == "हे स्नेहा" || lower == "सुनो स्नेहा" || lower == "सुनो" ||
-                lower == "hello sneha" || lower == "hi sneha" || lower == "ok sneha" || lower == "siri"
+                lower == "hello sneha" || lower == "hi sneha" || lower == "ok sneha" || lower == "siri" ||
+                lower == "हेलो स्नेहा" || lower == "नमस्ते स्नेहा" || lower == "हाय स्नेहा" ||
+                lower == "हेलो" || lower == "नमस्ते" || lower == "hello" || lower == "hi"
         if (isJustCalling) {
             return CommandResult(
-                spokenResponse = "जी मास्टर! मैं हाजिर हूँ, आज्ञा दीजिए! मैं आपके लिए क्या करूँ?",
-                actionTaken = SnehaAction.ConversationalAnswer("जी मास्टर! मैं हाजिर हूँ, आज्ञा दीजिए!")
+                spokenResponse = "जी $userTitle! मैं हाजिर हूँ, आज्ञा दीजिए! मैं आपके लिए क्या करूँ?",
+                actionTaken = SnehaAction.ConversationalAnswer("जी $userTitle! मैं हाजिर हूँ, आज्ञा दीजिए!")
+            )
+        }
+
+        // 1a. WhatsApp Call Command ("व्हाट्सएप कॉल करो राहुल", "whatsapp call to rahul", "व्हाट्सएप पर कॉल लगाओ")
+        val isWhatsAppCall = (lower.contains("whatsapp") || lower.contains("व्हाट्सएप") || lower.contains("वाट्सएप")) &&
+                (lower.contains("call") || lower.contains("कॉल") || lower.contains("फोन") || lower.contains("लगाओ") || lower.contains("मिलाओ"))
+        if (isWhatsAppCall) {
+            val target = extractContactTarget(input, listOf("व्हाट्सएप पर कॉल करो", "व्हाट्सएप कॉल करो", "व्हाट्सएप पर", "व्हाट्सएप कॉल", "whatsapp call to", "whatsapp call", "कॉल करो", "कॉल लगाओ", "को कॉल करो", "को फोन लगाओ"))
+            val (success, speech) = WhatsAppManager.makeWhatsAppCall(context, target)
+            return CommandResult(
+                spokenResponse = speech,
+                actionTaken = SnehaAction.ConversationalAnswer(speech)
+            )
+        }
+
+        // 1b. WhatsApp Message Command ("व्हाट्सएप पर राहुल को मैसेज भेजो मैं 10 मिनट में आ रहा हूँ")
+        val isWhatsAppMsg = (lower.contains("whatsapp") || lower.contains("व्हाट्सएप") || lower.contains("वाट्सएप")) &&
+                (lower.contains("मैसेज") || lower.contains("संदेश") || lower.contains("message") || lower.contains("msg") || lower.contains("भेजो") || lower.contains("send"))
+        if (isWhatsAppMsg && !lower.contains("ऑटो") && !lower.contains("auto") && !lower.contains("रिप्लाई") && !lower.contains("reply")) {
+            val (target, message) = extractContactAndMessage(input, isWhatsApp = true)
+            val (success, speech) = WhatsAppManager.sendWhatsAppMessage(context, target, message)
+            return CommandResult(
+                spokenResponse = speech,
+                actionTaken = SnehaAction.ConversationalAnswer(speech)
+            )
+        }
+
+        // 1c. Direct SMS to anyone ("मैसेज भेजो राहुल को मैं आ रहा हूँ", "send message to 9876543210")
+        val isGeneralMsg = (lower.contains("मैसेज भेजो") || lower.contains("sms भेजो") || lower.contains("संदेश भेजो") ||
+                lower.contains("send message") || lower.contains("send sms") || lower.contains("message to") || lower.contains("sms to"))
+        if (isGeneralMsg) {
+            val (target, message) = extractContactAndMessage(input, isWhatsApp = false)
+            val (success, speech) = WhatsAppManager.sendDirectSms(context, target, message)
+            return CommandResult(
+                spokenResponse = speech,
+                actionTaken = SnehaAction.ConversationalAnswer(speech)
+            )
+        }
+
+        // 1d. Direct Phone Call to anyone ("कॉल करो राहुल", "call 9876543210", "फोन लगाओ राहुल को")
+        val isDirectCall = (lower.startsWith("call ") || lower.startsWith("कॉल करो ") || lower.startsWith("फोन लगाओ ") ||
+                lower.startsWith("फोन करो ") || lower.contains("को कॉल करो") || lower.contains("को फोन लगाओ") || lower.contains("को फोन करो")) &&
+                !lower.contains("pick") && !lower.contains("पिक") && !lower.contains("उठा") && !lower.contains("काट") && !lower.contains("cut") && !lower.contains("reject")
+        if (isDirectCall) {
+            val target = extractContactTarget(input, listOf("कॉल करो", "फोन लगाओ", "फोन करो", "call to", "call", "को कॉल करो", "को फोन लगाओ", "को फोन करो"))
+            val (success, speech) = WhatsAppManager.makeDirectPhoneCall(context, target)
+            return CommandResult(
+                spokenResponse = speech,
+                actionTaken = SnehaAction.ConversationalAnswer(speech)
             )
         }
 
@@ -291,15 +343,85 @@ object SnehaCommandEngine {
             )
         }
 
-        // 7. Stop Alarm / Emergency
-        if ((lower.contains("alarm") || lower.contains("अलार्म") || lower.contains("sos")) &&
-            (lower.contains("बंद") || lower.contains("stop") || lower.contains("off") || lower.contains("रोक"))
-        ) {
+        // 7. Stop Siren / Emergency Disarm ("सायरन बंद करो", "स्टॉप सायरन", "सायरन ऑफ", "stop siren", "siren off", etc.)
+        val isStopSiren = (lower.contains("सायरन") || lower.contains("siren") || lower.contains("अलार्म") || lower.contains("alarm") || lower.contains("sos")) &&
+                (lower.contains("बंद") || lower.contains("stop") || lower.contains("off") || lower.contains("रोक") || lower.contains("चुप") || lower.contains("शांत"))
+        if (isStopSiren) {
+            AntiTheftManager.stopAlarm(context)
             PhoneControlManager.stopEmergencyAlarm()
             PhoneControlManager.stopEmergencyStrobe(context)
             return CommandResult(
-                spokenResponse = "मास्टर, अलार्म और इमरजेंसी सायरन बंद कर दिया गया है।",
-                actionTaken = null
+                spokenResponse = "मास्टर की आवाज पहचानी गई! इमरजेंसी सायरन और अलार्म बंद कर दिया गया है।",
+                actionTaken = SnehaAction.StopSiren
+            )
+        }
+
+        // 7a. Start Emergency Siren ("सायरन बजाओ", "सायरन ऑन करो", "start siren", "emergency siren")
+        val isStartSiren = (lower.contains("सायरन") || lower.contains("siren")) &&
+                (lower.contains("बजाओ") || lower.contains("ऑन") || lower.contains("चालू") || lower.contains("start") || lower.contains("on"))
+        if (isStartSiren) {
+            AntiTheftManager.triggerTheftAlarm(context, "मास्टर! इमरजेंसी सायरन चालू कर दिया गया है!")
+            return CommandResult(
+                spokenResponse = "मास्टर! इमरजेंसी सायरन और फ्लैशलाइट स्ट्रोब चालू कर दिया गया है। बंद करने के लिए 'सायरन बंद करो' कहें।",
+                actionTaken = SnehaAction.EmergencyUnlockAndSos
+            )
+        }
+
+        // 7b. Anti-Intruder Pickup Siren Arm ("कोई और फोन ले तो सायरन बजाओ", "पिकअप सायरन ऑन करो", "डोंट टच फोन")
+        val isPickupSirenCommand = (lower.contains("कोई और") || lower.contains("फोन ले") || lower.contains("फोन उठाए") || lower.contains("पिकअप सायरन") || lower.contains("pickup siren") || lower.contains("डोंट टच"))
+        if (isPickupSirenCommand) {
+            val isOff = lower.contains("बंद") || lower.contains("off")
+            if (isOff) {
+                AntiTheftManager.setPickupSirenGuard(context, false)
+                return CommandResult(
+                    spokenResponse = "मास्टर, अनधिकृत पिकअप सायरन गार्ड बंद कर दिया गया है।",
+                    actionTaken = SnehaAction.OpenAntiTheft
+                )
+            } else {
+                AntiTheftManager.setPickupSirenGuard(context, true)
+                return CommandResult(
+                    spokenResponse = "मास्टर, अनधिकृत फोन पिकअप सायरन गार्ड चालू कर दिया गया है! अब आपके अलावा कोई भी फोन उठाएगा तो तुरंत इमरजेंसी सायरन बजेगा, और आपके 'सायरन बंद करो' बोलने पर ही बंद होगा।",
+                    actionTaken = SnehaAction.OpenAntiTheft
+                )
+            }
+        }
+
+        // 7c. Bluetooth Voice Control ("ब्लूटूथ ऑन करो", "ब्लूटूथ बंद करो", "bluetooth on", "bluetooth off")
+        if (lower.contains("bluetooth") || lower.contains("ब्लूटूथ") || lower.contains("बूलूटूथ")) {
+            val isOff = lower.contains("बंद") || lower.contains("off") || lower.contains("disable") || lower.contains("हटा")
+            val isOn = lower.contains("चालू") || lower.contains("ऑन") || lower.contains("on") || lower.contains("enable") || lower.contains("खोलो")
+            val targetState = if (isOff) false else if (isOn) true else !PhoneControlManager.isBluetoothEnabled(context)
+
+            val (success, msg) = PhoneControlManager.toggleBluetooth(context, targetState)
+            return CommandResult(
+                spokenResponse = "मास्टर, $msg",
+                actionTaken = SnehaAction.ToggleBluetooth(targetState)
+            )
+        }
+
+        // 7d. Hotspot Voice Control ("हॉटस्पॉट ऑन करो", "हॉटस्पॉट चालू करो", "हॉटस्पॉट बंद करो", "hotspot on", "hotspot off")
+        if (lower.contains("hotspot") || lower.contains("हॉटस्पॉट") || lower.contains("हॉट स्पाट") || lower.contains("tethering") || lower.contains("टेदरिंग")) {
+            val isOff = lower.contains("बंद") || lower.contains("off") || lower.contains("disable")
+            val isOn = lower.contains("चालू") || lower.contains("ऑन") || lower.contains("on") || lower.contains("enable") || lower.contains("खोलो")
+            val targetState = if (isOff) false else if (isOn) true else !PhoneControlManager.isHotspotActive.value
+
+            val (success, msg) = PhoneControlManager.toggleHotspot(context, targetState)
+            return CommandResult(
+                spokenResponse = msg,
+                actionTaken = SnehaAction.ToggleHotspot(targetState)
+            )
+        }
+
+        // 7e. Wi-Fi Voice Control ("वाईफाई ऑन करो", "वाईफाई चालू करो", "वाईफाई बंद करो", "wifi on", "wifi off")
+        if (lower.contains("wifi") || lower.contains("वाईफाई") || lower.contains("वाई-फाई") || lower.contains("wi-fi")) {
+            val isOff = lower.contains("बंद") || lower.contains("off") || lower.contains("disable")
+            val isOn = lower.contains("चालू") || lower.contains("ऑन") || lower.contains("on") || lower.contains("enable") || lower.contains("खोलो")
+            val targetState = if (isOff) false else if (isOn) true else !PhoneControlManager.isWifiEnabled(context)
+
+            val (success, msg) = PhoneControlManager.toggleWifi(context, targetState)
+            return CommandResult(
+                spokenResponse = "मास्टर, $msg",
+                actionTaken = SnehaAction.ToggleWifi(targetState)
             )
         }
 
@@ -402,12 +524,12 @@ object SnehaCommandEngine {
             }
         }
 
-        // 15. General Conversational / AI Query with Gemini API (Always addressing as Master)
+        // 15. General Conversational / AI Query with Gemini API (Always addressing as user's chosen title)
         val aiResponse = GeminiApiClient.getSnehaAiResponse(input)
-        val formattedResponse = if (!aiResponse.contains("मास्टर") && !aiResponse.contains("master", ignoreCase = true)) {
-            "मास्टर, $aiResponse"
+        val formattedResponse = if (!aiResponse.contains(userTitle, ignoreCase = true) && !aiResponse.contains("मास्टर")) {
+            "$userTitle, $aiResponse"
         } else {
-            aiResponse
+            aiResponse.replace("मास्टर", userTitle)
         }
 
         return CommandResult(
@@ -426,5 +548,57 @@ object SnehaCommandEngine {
             }
         }
         return result.replace("पर", "").replace("में", "").replace("करो", "").replace("for", "").trim()
+    }
+
+    private fun extractContactTarget(fullText: String, prefixes: List<String>): String {
+        var clean = fullText
+        for (p in prefixes) {
+            val idx = clean.indexOf(p, ignoreCase = true)
+            if (idx != -1) {
+                clean = clean.substring(idx + p.length).trim()
+                break
+            }
+        }
+        return clean.replace("को", "")
+            .replace("पर", "")
+            .replace("करो", "")
+            .replace("लगाओ", "")
+            .replace("मिलाओ", "")
+            .replace("call", "", ignoreCase = true)
+            .replace("please", "", ignoreCase = true)
+            .trim()
+    }
+
+    private fun extractContactAndMessage(fullText: String, isWhatsApp: Boolean): Pair<String, String> {
+        var text = fullText
+        val removePrefixes = listOf(
+            "व्हाट्सएप पर", "व्हाट्सएप में", "व्हाट्सएप", "whatsapp par", "whatsapp per", "whatsapp to", "whatsapp",
+            "मैसेज भेजो", "संदेश भेजो", "sms भेजो", "send message to", "send sms to", "message to", "sms to"
+        )
+        for (p in removePrefixes) {
+            val idx = text.indexOf(p, ignoreCase = true)
+            if (idx != -1) {
+                text = text.substring(idx + p.length).trim()
+                break
+            }
+        }
+
+        val koIdx = text.indexOf(" को ")
+        if (koIdx != -1) {
+            val target = text.substring(0, koIdx).trim()
+            var msg = text.substring(koIdx + 4).trim()
+            msg = msg.replace("मैसेज", "").replace("संदेश", "").replace("भेजो", "").replace("send", "").replace("लिखो", "").trim()
+            if (msg.isBlank()) msg = "नमस्ते!"
+            return Pair(target, msg)
+        }
+
+        val parts = text.split(" ", limit = 2)
+        if (parts.size == 2) {
+            val target = parts[0].trim()
+            val msg = parts[1].replace("मैसेज", "").replace("भेजो", "").replace("send", "").trim()
+            return Pair(target, if (msg.isNotBlank()) msg else "नमस्ते!")
+        }
+
+        return Pair(text.trim(), "नमस्ते! मैं स्नेहा के माध्यम से मैसेज कर रहा हूँ।")
     }
 }

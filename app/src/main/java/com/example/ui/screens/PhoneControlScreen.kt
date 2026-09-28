@@ -21,7 +21,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.WifiTethering
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.platform.LocalContext
+import com.example.engine.AntiTheftManager
+import com.example.engine.PhoneControlManager
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Chat
@@ -95,6 +101,12 @@ fun PhoneControlScreen(
     onOpenCamera: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val isBluetoothOn by PhoneControlManager.isBluetoothActive.collectAsState()
+    val isHotspotOn by PhoneControlManager.isHotspotActive.collectAsState()
+    val isWifiOn by PhoneControlManager.isWifiActive.collectAsState()
+    val isAlarmActive by AntiTheftManager.isAlarmActive.collectAsState()
+
     var appSearchQuery by remember { mutableStateOf("") }
     var inAppSearchText by remember { mutableStateOf("") }
     var selectedTargetApp by remember { mutableStateOf("YouTube") }
@@ -119,13 +131,13 @@ fun PhoneControlScreen(
         // Title Header
         item {
             Text(
-                text = "फोन नियंत्रण & ऐप सर्च 📱",
+                text = "फोन नियंत्रण & हार्डवेयर कंट्रोल 📱",
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = SnehaTextPrimary
             )
             Text(
-                text = "किसी भी ऐप को खोलें, उसके अंदर सर्च करें और हार्डवेयर नियंत्रित करें",
+                text = "ब्लूटूथ, हॉटस्पॉट, वाईफाई, टॉर्च, सायरन व ऐप्स को आवाज या स्क्रीन से नियंत्रित करें",
                 fontSize = 13.sp,
                 color = SnehaTextSecondary
             )
@@ -134,7 +146,7 @@ fun PhoneControlScreen(
         // Quick System Controls Grid
         item {
             Text(
-                text = "त्वरित सिस्टम नियंत्रण",
+                text = "हार्डवेयर & कनेक्टिविटी नियंत्रण",
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = SnehaCyan
@@ -142,6 +154,40 @@ fun PhoneControlScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                // Row 1: Bluetooth, Hotspot, Wi-Fi
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    ControlTile(
+                        title = if (isBluetoothOn) "ब्लूटूथ: ON" else "ब्लूटूथ: OFF",
+                        icon = Icons.Default.Bluetooth,
+                        active = isBluetoothOn,
+                        activeColor = Color(0xFF2979FF),
+                        onClick = { PhoneControlManager.toggleBluetooth(context, !isBluetoothOn) },
+                        modifier = Modifier.weight(1f).testTag("control_tile_bluetooth")
+                    )
+
+                    ControlTile(
+                        title = if (isHotspotOn) "हॉटस्पॉट: ON" else "हॉटस्पॉट: OFF",
+                        icon = Icons.Default.WifiTethering,
+                        active = isHotspotOn,
+                        activeColor = Color(0xFFFF9100),
+                        onClick = { PhoneControlManager.toggleHotspot(context, !isHotspotOn) },
+                        modifier = Modifier.weight(1f).testTag("control_tile_hotspot")
+                    )
+
+                    ControlTile(
+                        title = if (isWifiOn) "वाईफाई: ON" else "वाईफाई: OFF",
+                        icon = Icons.Default.Wifi,
+                        active = isWifiOn,
+                        activeColor = SnehaEmerald,
+                        onClick = { PhoneControlManager.toggleWifi(context, !isWifiOn) },
+                        modifier = Modifier.weight(1f).testTag("control_tile_wifi")
+                    )
+                }
+
+                // Row 2: Torch, Emergency Siren, Camera
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -155,6 +201,36 @@ fun PhoneControlScreen(
                         modifier = Modifier.weight(1f).testTag("control_tile_torch")
                     )
 
+                    ControlTile(
+                        title = if (isAlarmActive) "सायरन: बज रहा" else "सायरन टेस्ट",
+                        icon = Icons.Default.NotificationsActive,
+                        active = isAlarmActive,
+                        activeColor = SnehaPink,
+                        onClick = {
+                            if (isAlarmActive) {
+                                AntiTheftManager.stopAlarm(context)
+                            } else {
+                                AntiTheftManager.triggerTheftAlarm(context, "मास्टर! इमरजेंसी सायरन टेस्ट चालू है!")
+                            }
+                        },
+                        modifier = Modifier.weight(1f).testTag("control_tile_siren")
+                    )
+
+                    ControlTile(
+                        title = "कैमरा",
+                        icon = Icons.Default.CameraAlt,
+                        active = false,
+                        activeColor = SnehaPurple,
+                        onClick = onOpenCamera,
+                        modifier = Modifier.weight(1f).testTag("control_tile_camera")
+                    )
+                }
+
+                // Row 3: Volume Controls
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     ControlTile(
                         title = "वॉल्यूम बढ़ाएं",
                         icon = Icons.Default.VolumeUp,
@@ -172,12 +248,7 @@ fun PhoneControlScreen(
                         onClick = onVolumeDown,
                         modifier = Modifier.weight(1f).testTag("control_tile_volume_down")
                     )
-                }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
                     ControlTile(
                         title = "म्यूट करें",
                         icon = Icons.Default.VolumeMute,
@@ -186,23 +257,33 @@ fun PhoneControlScreen(
                         onClick = onVolumeMute,
                         modifier = Modifier.weight(1f).testTag("control_tile_mute")
                     )
+                }
+            }
+        }
 
-                    ControlTile(
-                        title = "वाईफाई",
-                        icon = Icons.Default.Wifi,
-                        active = false,
-                        activeColor = SnehaEmerald,
-                        onClick = onOpenWifi,
-                        modifier = Modifier.weight(1f).testTag("control_tile_wifi")
-                    )
-
-                    ControlTile(
-                        title = "कैमरा",
-                        icon = Icons.Default.CameraAlt,
-                        active = false,
-                        activeColor = SnehaPurple,
-                        onClick = onOpenCamera,
-                        modifier = Modifier.weight(1f).testTag("control_tile_camera")
+        // Voice Hardware Control Helper Card
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = SnehaDarkSurface),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, SnehaCyan.copy(alpha = 0.25f))
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "🗣️ बोलकर नियंत्रित करें (Voice Commands):",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SnehaCyan
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "• \"ब्लूटूथ ऑन करो\" / \"ब्लूटूथ बंद करो\"\n• \"हॉटस्पॉट ऑन करो\" / \"हॉटस्पॉट बंद करो\"\n• \"वाईफाई ऑन करो\" / \"वाईफाई बंद करो\"\n• \"टॉर्च जलाओ\" / \"टॉर्च बंद करो\"\n• \"सायरन बजाओ\" / \"सायरन बंद करो\"\n• \"कोई और फोन ले तो सायरन बजाओ\"",
+                        fontSize = 12.sp,
+                        color = SnehaTextPrimary,
+                        lineHeight = 18.sp
                     )
                 }
             }

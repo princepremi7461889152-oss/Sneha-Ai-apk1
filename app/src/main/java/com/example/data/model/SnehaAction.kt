@@ -32,5 +32,9 @@ sealed class SnehaAction {
     data class SetCustomWakeWord(val newName: String) : SnehaAction()
     data class ChangeVoicePersona(val personaName: String) : SnehaAction()
     data class AdjustSpeechRate(val rate: Float) : SnehaAction()
+    data class ToggleBluetooth(val enable: Boolean) : SnehaAction()
+    data class ToggleHotspot(val enable: Boolean) : SnehaAction()
+    data class ToggleWifi(val enable: Boolean) : SnehaAction()
+    object StopSiren : SnehaAction()
     data class ConversationalAnswer(val answer: String) : SnehaAction()
 }

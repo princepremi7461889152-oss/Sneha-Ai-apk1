@@ -87,8 +87,56 @@ class VoiceSpeechManager(private val context: Context) : TextToSpeech.OnInitList
                     textToSpeech?.setLanguage(Locale.getDefault())
                 }
             }
+
+            // Find best high-quality natural female voice available in the engine
+            try {
+                val availableVoices = textToSpeech?.voices
+                if (!availableVoices.isNullOrEmpty()) {
+                    fun isFemale(name: String): Boolean {
+                        val n = name.lowercase()
+                        val isExplicitMale = (n.contains("male") && !n.contains("female")) ||
+                                n.contains("man") ||
+                                n.contains("-hie") ||
+                                n.contains("#male") ||
+                                n.contains("_male")
+                        if (isExplicitMale) return false
+                        return n.contains("female") ||
+                                n.contains("woman") ||
+                                n.contains("f00") ||
+                                n.contains("-hid") ||
+                                n.contains("-hia") ||
+                                n.contains("-hic") ||
+                                n.contains("-cfn") ||
+                                n.contains("zira") ||
+                                n.contains("eva")
+                    }
+
+                    // 1. Prioritize Hindi female voice
+                    val bestFemaleVoice = availableVoices.firstOrNull { v ->
+                        v.locale.language == "hi" && isFemale(v.name)
+                    } ?: availableVoices.firstOrNull { v ->
+                        v.locale.country.equals("IN", ignoreCase = true) && isFemale(v.name)
+                    } ?: availableVoices.firstOrNull { v ->
+                        isFemale(v.name)
+                    } ?: availableVoices.firstOrNull { v ->
+                        val n = v.name.lowercase()
+                        v.locale.language == "hi" && !((n.contains("male") && !n.contains("female")) || n.contains("-hie") || n.contains("man"))
+                    }
+
+                    if (bestFemaleVoice != null) {
+                        textToSpeech?.voice = bestFemaleVoice
+                        Log.d(tag, "Selected female TTS voice: ${bestFemaleVoice.name}")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(tag, "Voice engine selection note", e)
+            }
+
+            // Ensure pitch is feminine and sweet (1.18f)
+            val effectivePitch = if (speechPitch < 1.05f) 1.18f else speechPitch
+            speechPitch = effectivePitch
             textToSpeech?.setSpeechRate(speechRate)
-            textToSpeech?.setPitch(speechPitch)
+            textToSpeech?.setPitch(effectivePitch)
 
             textToSpeech?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {
@@ -178,39 +226,46 @@ class VoiceSpeechManager(private val context: Context) : TextToSpeech.OnInitList
             override fun onBufferReceived(buffer: ByteArray?) {}
 
             override fun onEndOfSpeech() {
-                _voiceState.value = VoiceState.THINKING
+                if (_spokenTextLive.value.isNotBlank()) {
+                    _voiceState.value = VoiceState.THINKING
+                }
                 _audioAmplitude.value = 0f
             }
 
             override fun onError(error: Int) {
-                _voiceState.value = VoiceState.IDLE
                 _audioAmplitude.value = 0f
                 isRecognizerBusy = false
 
                 // Error Code 5 = ERROR_CLIENT (Client state conflict or rapid re-initialization)
                 // Error Code 11 = ERROR_SERVER_DISCONNECTED (API 31+ background Google Speech Service disconnect)
-                // Both are transient background lifecycle states that must be gracefully recovered without scaring the user.
                 when (error) {
                     SpeechRecognizer.ERROR_NO_MATCH,
                     SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
-                        // User paused speaking or silence detected - silent continuous resume
+                        // User paused speaking or silence detected - stay in LISTENING without blinking off
                         if (_isContinuousListening.value) {
-                            scheduleContinuousListenResume(600L)
+                            _voiceState.value = VoiceState.LISTENING
+                            scheduleContinuousListenResume(50L)
+                        } else {
+                            _voiceState.value = VoiceState.IDLE
                         }
                     }
                     SpeechRecognizer.ERROR_CLIENT -> { // Code 5
-                        Log.w(tag, "Handled SpeechRecognizer ERROR_CLIENT (Code 5): Re-syncing recognizer client safely.")
                         recreateRecognizer()
                         if (_isContinuousListening.value) {
-                            scheduleContinuousListenResume(1000L)
+                            _voiceState.value = VoiceState.LISTENING
+                            scheduleContinuousListenResume(150L)
+                        } else {
+                            _voiceState.value = VoiceState.IDLE
                         }
                     }
                     11, // SpeechRecognizer.ERROR_SERVER_DISCONNECTED
-                    SpeechRecognizer.ERROR_SERVER -> { // Server disconnect (Code 11 / Code 3)
-                        Log.w(tag, "Handled SpeechRecognizer ERROR_SERVER_DISCONNECTED (Code $error): Reconnecting speech service.")
+                    SpeechRecognizer.ERROR_SERVER -> {
                         recreateRecognizer()
                         if (_isContinuousListening.value) {
-                            scheduleContinuousListenResume(1200L)
+                            _voiceState.value = VoiceState.LISTENING
+                            scheduleContinuousListenResume(300L)
+                        } else {
+                            _voiceState.value = VoiceState.IDLE
                         }
                     }
                     SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> { // Code 8
@@ -219,40 +274,46 @@ class VoiceSpeechManager(private val context: Context) : TextToSpeech.OnInitList
                         } catch (ignored: Exception) {}
                         isRecognizerBusy = false
                         if (_isContinuousListening.value) {
-                            scheduleContinuousListenResume(1000L)
+                            _voiceState.value = VoiceState.LISTENING
+                            scheduleContinuousListenResume(150L)
+                        } else {
+                            _voiceState.value = VoiceState.IDLE
                         }
                     }
                     SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> { // Code 9
+                        _voiceState.value = VoiceState.IDLE
                         onSpeechError?.invoke("माइक की अनुमति (Microphone Permission) आवश्यक है। कृपया सेटिंग्स से अनुमति दें।")
                     }
                     SpeechRecognizer.ERROR_AUDIO -> { // Code 3
                         recreateRecognizer()
-                        if (!_isContinuousListening.value) {
-                            onSpeechError?.invoke("ऑडियो रिकॉर्डर पुनः कनेक्ट हो रहा है...")
-                        }
                         if (_isContinuousListening.value) {
-                            scheduleContinuousListenResume(1500L)
+                            _voiceState.value = VoiceState.LISTENING
+                            scheduleContinuousListenResume(400L)
+                        } else {
+                            _voiceState.value = VoiceState.IDLE
                         }
                     }
                     SpeechRecognizer.ERROR_NETWORK,
                     SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> {
-                        if (!_isContinuousListening.value) {
-                            onSpeechError?.invoke("इंटरनेट या वॉयस सर्विस कनेक्शन जांचें।")
+                        if (_isContinuousListening.value) {
+                            scheduleContinuousListenResume(1500L)
                         } else {
-                            scheduleContinuousListenResume(2500L)
+                            _voiceState.value = VoiceState.IDLE
+                            onSpeechError?.invoke("इंटरनेट या वॉयस सर्विस कनेक्शन जांचें।")
                         }
                     }
                     else -> {
-                        Log.w(tag, "Speech recognition non-fatal event code: $error")
                         if (_isContinuousListening.value) {
-                            scheduleContinuousListenResume(1000L)
+                            _voiceState.value = VoiceState.LISTENING
+                            scheduleContinuousListenResume(200L)
+                        } else {
+                            _voiceState.value = VoiceState.IDLE
                         }
                     }
                 }
             }
 
             override fun onResults(results: Bundle?) {
-                _voiceState.value = VoiceState.IDLE
                 _audioAmplitude.value = 0f
                 isRecognizerBusy = false
 
@@ -261,9 +322,13 @@ class VoiceSpeechManager(private val context: Context) : TextToSpeech.OnInitList
                 _spokenTextLive.value = text
 
                 if (text.isNotBlank()) {
+                    _voiceState.value = VoiceState.THINKING
                     handleRecognizedText(text)
                 } else if (_isContinuousListening.value) {
-                    scheduleContinuousListenResume(700L)
+                    _voiceState.value = VoiceState.LISTENING
+                    scheduleContinuousListenResume(50L)
+                } else {
+                    _voiceState.value = VoiceState.IDLE
                 }
             }
 

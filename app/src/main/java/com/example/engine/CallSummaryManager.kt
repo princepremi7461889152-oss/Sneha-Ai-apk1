@@ -29,63 +29,7 @@ object CallSummaryManager {
 
     private const val TAG = "CallSummaryManager"
 
-    private val _summaries = MutableStateFlow<List<CallSummaryItem>>(
-        listOf(
-            CallSummaryItem(
-                id = 1L,
-                callerName = "डॉ. शर्मा (एचओडी, कंप्यूटर साइंस)",
-                callerNumber = "+91 98112-45678",
-                durationText = "2 मिनट 45 सेकंड",
-                category = "कॉलेज / पढ़ाई",
-                timestamp = "आज, 10:30 AM",
-                summaryPoints = listOf(
-                    "फाइनल ईयर प्रोजेक्ट प्रेजेंटेशन की तारीख 15 तारीख तय हुई है।",
-                    "डॉ. शर्मा ने पीपीटी (PPT) और सिनॉप्सिस की हार्ड कॉपी मांगी है।",
-                    "ग्रुप के सभी 3 सदस्यों की उपस्थिति अनिवार्य है।"
-                ),
-                actionItems = listOf(
-                    "कल दोपहर 12 बजे तक फाइनल सिनॉप्सिस प्रिंट निकालना",
-                    "प्रोजेक्ट कोड गिटहब (GitHub) पर पुश करना",
-                    "साथियों को कल सुबह 9 बजे मिलने को बोलना"
-                ),
-                urgencyLevel = "उच्च (High) 🔴",
-                rawSnippet = "नमस्ते बेटा, 15 तारीख को आपका प्रोजेक्ट प्रेजेंटेशन है। सभी 3 सदस्य हार्ड कॉपी के साथ आएं।"
-            ),
-            CallSummaryItem(
-                id = 2L,
-                callerName = "रोहित (कॉलेज फ्रेंड)",
-                callerNumber = "+91 98765-11223",
-                durationText = "4 मिनट 10 सेकंड",
-                category = "दोस्त / परिवार",
-                timestamp = "आज, 09:15 AM",
-                summaryPoints = listOf(
-                    "डेटा स्ट्रक्चर्स के यूनिट 3 के नोट्स मांगे।",
-                    "कल की कैंटीन मीटिंग और लैब असाइनमेंट पर चर्चा हुई।"
-                ),
-                actionItems = listOf(
-                    "रोहित को व्हाट्सएप पर यूनिट 3 की पीडीएफ भेजना"
-                ),
-                urgencyLevel = "मध्यम (Medium) 🟡",
-                rawSnippet = "भाई कल लैब में कौन सा प्रोग्राम दिखाना है? यूनिट 3 के नोट्स पीडीएफ भेज दे प्लीज।"
-            ),
-            CallSummaryItem(
-                id = 3L,
-                callerName = "मम्मी ❤️",
-                callerNumber = "+91 99887-76655",
-                durationText = "1 मिनट 30 सेकंड",
-                category = "दोस्त / परिवार",
-                timestamp = "कल, 08:00 PM",
-                summaryPoints = listOf(
-                    "घर समय पर आने और शाम को आते समय मेडिकल स्टोर से दवा लाने को कहा।"
-                ),
-                actionItems = listOf(
-                    "शाम को घर लौटते समय मेडिकल स्टोर से दवा लेना"
-                ),
-                urgencyLevel = "उच्च (High) 🔴",
-                rawSnippet = "बेटा क्लास खत्म करके सीधे घर आना और रास्ते में मेडिकल से पापा की दवा ले आना।"
-            )
-        )
-    )
+    private val _summaries = MutableStateFlow<List<CallSummaryItem>>(emptyList())
     val summaries: StateFlow<List<CallSummaryItem>> = _summaries.asStateFlow()
 
     fun toggleActionItem(id: Long) {

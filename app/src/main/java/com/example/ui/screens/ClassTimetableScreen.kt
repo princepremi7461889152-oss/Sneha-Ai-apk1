@@ -357,7 +357,7 @@ fun ClassTimetableScreen(
                                 )
                             }
                             IconButton(
-                                onClick = { ClassTimetableManager.removeLecture(lecture.id) }
+                                onClick = { ClassTimetableManager.removeLecture(context, lecture.id) }
                             ) {
                                 Icon(Icons.Default.Delete, contentDescription = "Delete", tint = SnehaTextSecondary, modifier = Modifier.size(18.dp))
                             }
@@ -454,7 +454,8 @@ fun ClassTimetableScreen(
                         onClick = {
                             if (subjectName.isNotBlank()) {
                                 ClassTimetableManager.addLecture(
-                                    ClassLecture(
+                                    context = context,
+                                    lecture = ClassLecture(
                                         id = System.currentTimeMillis().toString(),
                                         dayOfWeek = selectedDay,
                                         subject = subjectName,

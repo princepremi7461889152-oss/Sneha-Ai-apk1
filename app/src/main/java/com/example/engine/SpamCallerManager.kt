@@ -30,34 +30,7 @@ object SpamCallerManager {
 
     private const val TAG = "SpamCallerManager"
 
-    private val _blockedSpamLogs = MutableStateFlow<List<SpamReport>>(
-        listOf(
-            SpamReport(
-                phoneNumber = "+91 14098-76543",
-                callerName = "बजाज लोन टेलीमार्केटिंग",
-                category = CallerCategory.TELEMARKETER,
-                spamScorePercentage = 95,
-                reportsCount = 1420,
-                wasBlocked = true
-            ),
-            SpamReport(
-                phoneNumber = "+91 91234-56789",
-                callerName = "फर्जी लॉटरी / बिजली बिल स्कैम",
-                category = CallerCategory.SUSPECTED_FRAUD,
-                spamScorePercentage = 98,
-                reportsCount = 3890,
-                wasBlocked = true
-            ),
-            SpamReport(
-                phoneNumber = "+91 98765-43210",
-                callerName = "ब्लूडार्ट कूरियर डिलीवरी बॉय",
-                category = CallerCategory.DELIVERY,
-                spamScorePercentage = 5,
-                reportsCount = 2,
-                wasBlocked = false
-            )
-        )
-    )
+    private val _blockedSpamLogs = MutableStateFlow<List<SpamReport>>(emptyList())
     val blockedSpamLogs: StateFlow<List<SpamReport>> = _blockedSpamLogs.asStateFlow()
 
     private val userCustomBlacklist = mutableSetOf<String>()

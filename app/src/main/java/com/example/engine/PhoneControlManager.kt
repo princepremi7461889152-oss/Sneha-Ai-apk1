@@ -3,6 +3,8 @@ package com.example.engine
 import android.app.Activity
 import android.app.KeyguardManager
 import android.app.SearchManager
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
@@ -15,6 +17,7 @@ import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
 import android.net.Uri
+import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import android.os.Build
 import android.provider.AlarmClock
@@ -24,6 +27,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.sin
@@ -34,6 +40,15 @@ object PhoneControlManager {
     private var alarmTrack: AudioTrack? = null
     private var isAlarmPlaying = false
     private var strobeJob: Job? = null
+
+    private val _isHotspotActive = MutableStateFlow(false)
+    val isHotspotActive: StateFlow<Boolean> = _isHotspotActive.asStateFlow()
+
+    private val _isBluetoothActive = MutableStateFlow(false)
+    val isBluetoothActive: StateFlow<Boolean> = _isBluetoothActive.asStateFlow()
+
+    private val _isWifiActive = MutableStateFlow(false)
+    val isWifiActive: StateFlow<Boolean> = _isWifiActive.asStateFlow()
 
     /**
      * Lists all launchable apps on the device.
@@ -414,6 +429,181 @@ object PhoneControlManager {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return "ऑडियो सर्विस अनुपलब्ध है।"
         audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, AudioManager.FLAG_SHOW_UI)
         return "फोन म्यूट कर दिया गया है।"
+    }
+
+    /**
+     * Bluetooth Control
+     */
+    fun isBluetoothEnabled(context: Context): Boolean {
+        return try {
+            val bm = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+            val adapter = bm?.adapter ?: BluetoothAdapter.getDefaultAdapter()
+            val state = adapter?.isEnabled == true
+            _isBluetoothActive.value = state
+            state
+        } catch (e: Exception) {
+            _isBluetoothActive.value
+        }
+    }
+
+    fun toggleBluetooth(context: Context, enable: Boolean): Pair<Boolean, String> {
+        return try {
+            val bm = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+            val adapter = bm?.adapter ?: BluetoothAdapter.getDefaultAdapter()
+            if (adapter == null) {
+                return Pair(false, "डिवाइस में ब्लूटूथ हार्डवेयर उपलब्ध नहीं है।")
+            }
+
+            _isBluetoothActive.value = enable
+
+            if (enable) {
+                if (adapter.isEnabled) {
+                    return Pair(true, "ब्लूटूथ पहले से ही ऑन है।")
+                }
+                @Suppress("DEPRECATION")
+                val success = try { adapter.enable() } catch (e: Exception) { false }
+                if (!success) {
+                    val intent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    try {
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        openBluetoothSettings(context)
+                    }
+                }
+                Pair(true, "ब्लूटूथ ऑन कर दिया गया है।")
+            } else {
+                if (!adapter.isEnabled) {
+                    return Pair(true, "ब्लूटूथ पहले से ही बंद है।")
+                }
+                @Suppress("DEPRECATION")
+                val success = try { adapter.disable() } catch (e: Exception) { false }
+                if (!success) {
+                    openBluetoothSettings(context)
+                }
+                Pair(true, "ब्लूटूथ बंद कर दिया गया है।")
+            }
+        } catch (e: Exception) {
+            openBluetoothSettings(context)
+            Pair(true, "ब्लूटूथ सेटिंग्स खोली गई हैं।")
+        }
+    }
+
+    fun openBluetoothSettings(context: Context) {
+        try {
+            val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            context.startActivity(Intent(Settings.ACTION_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+        }
+    }
+
+    /**
+     * Wi-Fi Control
+     */
+    fun isWifiEnabled(context: Context): Boolean {
+        return try {
+            val wm = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            val state = wm?.isWifiEnabled == true
+            _isWifiActive.value = state
+            state
+        } catch (e: Exception) {
+            _isWifiActive.value
+        }
+    }
+
+    fun toggleWifi(context: Context, enable: Boolean): Pair<Boolean, String> {
+        return try {
+            val wm = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            _isWifiActive.value = enable
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val panelIntent = Intent(Settings.Panel.ACTION_WIFI).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                try {
+                    context.startActivity(panelIntent)
+                } catch (e: Exception) {
+                    openWifiSettings(context)
+                }
+                val msg = if (enable) "वाईफाई चालू करने के लिए पैनल खोला गया है।" else "वाईफाई बंद करने के लिए पैनल खोला गया है।"
+                Pair(true, msg)
+            } else {
+                @Suppress("DEPRECATION")
+                wm?.isWifiEnabled = enable
+                val msg = if (enable) "वाईफाई ऑन कर दिया गया है।" else "वाईफाई बंद कर दिया गया है।"
+                Pair(true, msg)
+            }
+        } catch (e: Exception) {
+            openWifiSettings(context)
+            Pair(true, "वाईफाई सेटिंग्स खोली गई हैं।")
+        }
+    }
+
+    fun openWifiSettings(context: Context) {
+        try {
+            val intent = Intent(Settings.ACTION_WIFI_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            context.startActivity(Intent(Settings.ACTION_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+        }
+    }
+
+    /**
+     * Hotspot Control
+     */
+    fun toggleHotspot(context: Context, enable: Boolean): Pair<Boolean, String> {
+        _isHotspotActive.value = enable
+        return try {
+            openHotspotSettings(context)
+            val actionText = if (enable) "हॉटस्पॉट चालू (ON)" else "हॉटस्पॉट बंद (OFF)"
+            Pair(true, "मास्टर, $actionText करने के लिए पोर्टेबल हॉटस्पॉट सेटिंग्स खोली गई है।")
+        } catch (e: Exception) {
+            Pair(false, "हॉटस्पॉट सेटिंग्स खोलने में समस्या हुई।")
+        }
+    }
+
+    fun openHotspotSettings(context: Context) {
+        try {
+            val intent = Intent().apply {
+                action = "android.settings.TETHER_SETTINGS"
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            try {
+                val intent = Intent(Settings.ACTION_WIRELESS_SETTINGS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+            } catch (ex: Exception) {
+                context.startActivity(Intent(Settings.ACTION_SETTINGS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                })
+            }
+        }
+    }
+
+    fun openMobileDataSettings(context: Context) {
+        try {
+            val intent = Intent(Settings.ACTION_DATA_ROAMING_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            context.startActivity(Intent(Settings.ACTION_WIRELESS_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+        }
     }
 
     fun getBatteryInfo(context: Context): String {

@@ -9,15 +9,21 @@ import androidx.room.RoomDatabase
     entities = [
         ChatMessageEntity::class,
         EmergencyContactEntity::class,
-        NotificationLogEntity::class
+        NotificationLogEntity::class,
+        ClassLectureEntity::class,
+        WhatsAppReplyLogEntity::class,
+        CallTranslationEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class SnehaDatabase : RoomDatabase() {
     abstract fun chatMessageDao(): ChatMessageDao
     abstract fun emergencyContactDao(): EmergencyContactDao
     abstract fun notificationLogDao(): NotificationLogDao
+    abstract fun classLectureDao(): ClassLectureDao
+    abstract fun whatsAppReplyLogDao(): WhatsAppReplyLogDao
+    abstract fun callTranslationDao(): CallTranslationDao
 
     companion object {
         @Volatile

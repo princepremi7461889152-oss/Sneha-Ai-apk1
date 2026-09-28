@@ -1,5 +1,10 @@
 package com.example.ui.screens
 
+import android.app.Activity
+import android.content.Intent
+import android.speech.RecognizerIntent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -21,8 +26,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Sensors
@@ -42,6 +49,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,11 +79,27 @@ fun AntiTheftScreen(
     val context = LocalContext.current
     val isPocketArmed by AntiTheftManager.isPocketGuardArmed.collectAsState()
     val isMotionArmed by AntiTheftManager.isMotionGuardArmed.collectAsState()
+    val isPickupArmed by AntiTheftManager.isPickupSirenArmed.collectAsState()
     val isWrongPinEnabled by AntiTheftManager.isWrongPinAlertEnabled.collectAsState()
     val isAlarmActive by AntiTheftManager.isAlarmActive.collectAsState()
+    val lastDisarmMessage by AntiTheftManager.lastDisarmMessage.collectAsState()
     val intruderLogs by AntiTheftManager.intruderLogs.collectAsState()
 
-    val isAnyArmed = isPocketArmed || isMotionArmed || isWrongPinEnabled
+    var voiceFeedbackText by remember { mutableStateOf("") }
+
+    val disarmVoiceLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull() ?: ""
+            if (spoken.isNotBlank()) {
+                val (success, msg) = AntiTheftManager.disarmWithVoice(context, spoken)
+                voiceFeedbackText = if (success) "✓ $msg ('$spoken')" else "✗ $msg ('$spoken')"
+            }
+        }
+    }
+
+    val isAnyArmed = isPocketArmed || isMotionArmed || isPickupArmed || isWrongPinEnabled
 
     LazyColumn(
         modifier = modifier
@@ -216,6 +242,45 @@ fun AntiTheftScreen(
                         color = SnehaCyan
                     )
 
+                    // 0. Unauthorized Pickup Siren (Primary User Feature)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFFFF3366).copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = Color(0xFFFF3366), modifier = Modifier.size(20.dp))
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("अनधिकृत फोन पिकअप सायरन", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SnehaTextPrimary)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(color = Color(0xFFFF3366).copy(alpha = 0.2f), shape = RoundedCornerShape(4.dp)) {
+                                        Text("मुख्य फीचर", fontSize = 9.sp, color = Color(0xFFFF3366), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                                    }
+                                }
+                                Text("मेरे अलावा कोई और फोन ले तो इमरजेंसी सायरन ऑन हो और बोलने पर बंद हो", fontSize = 11.sp, color = SnehaTextSecondary)
+                            }
+                        }
+                        Switch(
+                            checked = isPickupArmed,
+                            onCheckedChange = { AntiTheftManager.setPickupSirenGuard(context, it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color(0xFFFF3366),
+                                checkedTrackColor = Color(0xFFFF3366).copy(alpha = 0.3f)
+                            ),
+                            modifier = Modifier.testTag("switch_pickup_siren_guard")
+                        )
+                    }
+
                     // 1. Pocket Pickpocket Guard
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -313,6 +378,125 @@ fun AntiTheftScreen(
                             ),
                             modifier = Modifier.testTag("switch_wrong_pin_guard")
                         )
+                    }
+                }
+            }
+        }
+
+        // Voice Disarm (Master voice turn off siren) Card
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = SnehaDarkSurface),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, SnehaCyan.copy(alpha = 0.3f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(SnehaCyan.copy(alpha = 0.15f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Mic,
+                                    contentDescription = null,
+                                    tint = SnehaCyan,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "वॉयस डिस्आर्म (बोलकर सायरन बंद करें) 🎙️",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SnehaCyan
+                                )
+                                Text(
+                                    text = "सायरन बजने पर मास्टर बोलें और तुरंत बंद करें",
+                                    fontSize = 11.sp,
+                                    color = SnehaTextSecondary
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Surface(
+                        color = SnehaDarkSurfaceVariant,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = "मान्य वॉयस कमांड्स:",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = SnehaTextPrimary
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "• \"सायरन बंद करो\"\n• \"स्टॉप सायरन\"\n• \"अलार्म बंद करो\"\n• \"मैं आ गया / Stop Siren\"",
+                                fontSize = 12.sp,
+                                color = SnehaCyan,
+                                lineHeight = 18.sp
+                            )
+                        }
+                    }
+
+                    if (voiceFeedbackText.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = voiceFeedbackText,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (voiceFeedbackText.startsWith("✓")) SnehaCyan else SnehaPink
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Button(
+                            onClick = {
+                                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
+                                    putExtra(RecognizerIntent.EXTRA_PROMPT, "बोलें: 'सायरन बंद करो'")
+                                }
+                                try {
+                                    disarmVoiceLauncher.launch(intent)
+                                } catch (e: Exception) {
+                                    voiceFeedbackText = "स्पीच रिकग्निशन अनुपलब्ध है।"
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = SnehaCyan),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("btn_test_voice_disarm")
+                        ) {
+                            Icon(Icons.Default.Mic, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "बोलकर टेस्ट करें ('सायरन बंद करो')",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black
+                            )
+                        }
                     }
                 }
             }
