@@ -154,4 +154,21 @@ object VoicePreferences {
             .putBoolean(KEY_AUTO_READ_ENABLED, enabled)
             .apply()
     }
+
+    fun isContinuousListeningEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean("continuous_mic_always_on", true)
+    }
+
+    fun saveContinuousListeningEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean("continuous_mic_always_on", enabled).apply()
+    }
+
+    fun getMicChimeType(context: Context): com.example.engine.MicChimeType {
+        val id = getPrefs(context).getString("mic_chime_type", com.example.engine.MicChimeType.FUTURISTIC.id) ?: com.example.engine.MicChimeType.FUTURISTIC.id
+        return com.example.engine.MicChimeType.fromId(id)
+    }
+
+    fun saveMicChimeType(context: Context, type: com.example.engine.MicChimeType) {
+        getPrefs(context).edit().putString("mic_chime_type", type.id).apply()
+    }
 }

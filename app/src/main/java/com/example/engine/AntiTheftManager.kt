@@ -46,7 +46,7 @@ object AntiTheftManager : SensorEventListener {
     private val _isMotionGuardArmed = MutableStateFlow(false)
     val isMotionGuardArmed: StateFlow<Boolean> = _isMotionGuardArmed.asStateFlow()
 
-    private val _isPickupSirenArmed = MutableStateFlow(true)
+    private val _isPickupSirenArmed = MutableStateFlow(false)
     val isPickupSirenArmed: StateFlow<Boolean> = _isPickupSirenArmed.asStateFlow()
 
     private val _isWrongPinAlertEnabled = MutableStateFlow(true)
@@ -100,15 +100,10 @@ object AntiTheftManager : SensorEventListener {
 
     fun setPickupSirenGuard(context: Context, armed: Boolean) {
         init(context)
-        _isPickupSirenArmed.value = armed
-        _isMotionGuardArmed.value = armed
-        motionArmedTime = System.currentTimeMillis() + 2500L
+        _isPickupSirenArmed.value = false
+        _isMotionGuardArmed.value = false
         updateSensorRegistrations()
-        if (armed) {
-            BackgroundSpeaker.speak("मास्टर, अनधिकृत फोन पिकअप सायरन सक्रिय है। आपके अलावा किसी और के फोन छूते या उठाते ही तेज सायरन बज उठेगा और आपके बोलने पर ही बंद होगा।")
-        } else {
-            BackgroundSpeaker.speak("पिकअप सायरन सुरक्षा निष्क्रिय कर दी गई है।")
-        }
+        BackgroundSpeaker.speak("मास्टर, फोन हिलने पर बजने वाला सायरन सुरक्षा कारणों से स्थायी रूप से हटा दिया गया है ताकि फोन उठाने पर सायरन न बजे।")
     }
 
     fun setPocketGuard(context: Context, armed: Boolean) {
@@ -117,17 +112,17 @@ object AntiTheftManager : SensorEventListener {
         updateSensorRegistrations()
         if (armed) {
             BackgroundSpeaker.speak("मास्टर, पॉकेट एंटी-थेफ्ट गार्ड सक्रिय है। फोन जेब में सुरक्षित है।")
+        } else {
+            BackgroundSpeaker.speak("पॉकेट गार्ड निष्क्रिय कर दिया गया है।")
         }
     }
 
     fun setMotionGuard(context: Context, armed: Boolean) {
         init(context)
-        _isMotionGuardArmed.value = armed
-        motionArmedTime = System.currentTimeMillis() + 3000L // 3s grace period to set phone down
+        _isMotionGuardArmed.value = false
+        _isPickupSirenArmed.value = false
         updateSensorRegistrations()
-        if (armed) {
-            BackgroundSpeaker.speak("मास्टर, मोशन गार्ड चालू है। फोन को हिलाने पर तेज अलार्म बजेगा।")
-        }
+        BackgroundSpeaker.speak("मास्टर, फोन हिलाने या मोशन से सायरन एक्टिवेट होने का फीचर हटा दिया गया है।")
     }
 
     fun setWrongPinAlert(enabled: Boolean) {
@@ -140,9 +135,7 @@ object AntiTheftManager : SensorEventListener {
         if (_isPocketGuardArmed.value && proximitySensor != null) {
             sensorManager?.registerListener(this, proximitySensor, SensorManager.SENSOR_DELAY_NORMAL)
         }
-        if ((_isMotionGuardArmed.value || _isPocketGuardArmed.value || _isPickupSirenArmed.value) && accelerometer != null) {
-            sensorManager?.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_NORMAL)
-        }
+        // Accelerometer motion-shake siren is completely disabled as requested by user
     }
 
     /**
@@ -276,45 +269,7 @@ object AntiTheftManager : SensorEventListener {
             }
         }
 
-        if (event.sensor.type == Sensor.TYPE_ACCELEROMETER && (_isMotionGuardArmed.value || _isPickupSirenArmed.value)) {
-            if (System.currentTimeMillis() < motionArmedTime) {
-                // Still in grace period
-                lastAccelX = event.values[0]
-                lastAccelY = event.values[1]
-                lastAccelZ = event.values[2]
-                return
-            }
-
-            val dx = abs(event.values[0] - lastAccelX)
-            val dy = abs(event.values[1] - lastAccelY)
-            val dz = abs(event.values[2] - lastAccelZ)
-            val movement = sqrt((dx * dx + dy * dy + dz * dz).toDouble())
-
-            lastAccelX = event.values[0]
-            lastAccelY = event.values[1]
-            lastAccelZ = event.values[2]
-
-            // If phone was moved or picked up
-            if (movement > 3.8 && !_isAlarmActive.value) {
-                val nowStr = SimpleDateFormat("आज, hh:mm a", Locale.getDefault()).format(Date())
-                val entry = IntruderLogEntry(
-                    timeFormatted = nowStr,
-                    triggerReason = "अनधिकृत पिकअप सायरन: किसी अन्य व्यक्ति ने फोन उठाया या छुआ",
-                    avatarEmoji = "🚨",
-                    threatLevel = "अनधिकृत स्पर्श डिटेक्ट (Siren Active)",
-                    wasPhotoCaptured = true
-                )
-                _intruderLogs.value = listOf(entry) + _intruderLogs.value
-
-                val ctx = ContextValHolder.appContext
-                if (ctx != null) {
-                    triggerTheftAlarm(
-                        ctx,
-                        "सावधान! किसी अन्य व्यक्ति ने फोन उठाया है! इमरजेंसी सायरन बज रहा है! मास्टर के बोलने पर ही बंद होगा!"
-                    )
-                }
-            }
-        }
+        // Note: Accelerometer motion / phone shake siren is removed so phone movement never activates siren
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}

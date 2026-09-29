@@ -37,14 +37,20 @@ fun MyApplicationTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    val colorScheme = SnehaColorScheme
     val view = LocalView.current
+    val currentTheme = if (!view.isInEditMode) {
+        SnehaAppTheme.getSavedTheme(view.context)
+    } else {
+        SnehaAppTheme.CYBERPUNK
+    }
+    val colorScheme = getSnehaColorScheme(currentTheme)
+
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as? Activity)?.window
             if (window != null) {
-                window.statusBarColor = BackgroundDark.toArgb()
-                window.navigationBarColor = BackgroundDark.toArgb()
+                window.statusBarColor = currentTheme.backgroundColor.toArgb()
+                window.navigationBarColor = currentTheme.backgroundColor.toArgb()
                 WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
                 WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = false
             }

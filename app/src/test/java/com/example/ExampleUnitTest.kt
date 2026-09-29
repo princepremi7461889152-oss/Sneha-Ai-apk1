@@ -61,26 +61,85 @@ class ExampleUnitTest {
         val classic = com.example.data.model.VoicePersona.fromId("classic")
         assertEquals(com.example.data.model.VoicePersonaId.CLASSIC, classic.id)
         assertEquals(1.0f, classic.defaultSpeed)
-        assertEquals(1.05f, classic.defaultPitch)
+        assertEquals(1.18f, classic.defaultPitch)
 
         val pro = com.example.data.model.VoicePersona.fromId("pro")
         assertEquals(com.example.data.model.VoicePersonaId.PRO, pro.id)
-        assertEquals(1.18f, pro.defaultSpeed)
+        assertEquals(1.12f, pro.defaultSpeed)
+        assertEquals(1.12f, pro.defaultPitch)
 
         val cheerful = com.example.data.model.VoicePersona.fromId("cheerful")
         assertEquals(com.example.data.model.VoicePersonaId.CHEERFUL, cheerful.id)
-        assertEquals(1.25f, cheerful.defaultPitch)
+        assertEquals(1.30f, cheerful.defaultPitch)
+        assertEquals(1.05f, cheerful.defaultSpeed)
 
         val calm = com.example.data.model.VoicePersona.fromId("calm")
         assertEquals(com.example.data.model.VoicePersonaId.CALM, calm.id)
-        assertEquals(0.85f, calm.defaultSpeed)
+        assertEquals(0.90f, calm.defaultSpeed)
+        assertEquals(1.10f, calm.defaultPitch)
 
         val bold = com.example.data.model.VoicePersona.fromId("bold")
         assertEquals(com.example.data.model.VoicePersonaId.BOLD, bold.id)
-        assertEquals(0.76f, bold.defaultPitch)
+        assertEquals(1.05f, bold.defaultPitch)
+        assertEquals(1.0f, bold.defaultSpeed)
 
         // Fallback for unknown ID
         val unknown = com.example.data.model.VoicePersona.fromId("unknown_id")
         assertEquals(com.example.data.model.VoicePersonaId.CLASSIC, unknown.id)
+    }
+
+    @Test
+    fun testMicChimeType_allValuesAndFallback() {
+        val types = com.example.engine.MicChimeType.entries
+        assertEquals(5, types.size)
+
+        assertEquals(com.example.engine.MicChimeType.FUTURISTIC, com.example.engine.MicChimeType.fromId("futuristic"))
+        assertEquals(com.example.engine.MicChimeType.CRYSTAL_BELL, com.example.engine.MicChimeType.fromId("crystal"))
+        assertEquals(com.example.engine.MicChimeType.WATER_DROP, com.example.engine.MicChimeType.fromId("water_drop"))
+        assertEquals(com.example.engine.MicChimeType.GENTLE_PULSE, com.example.engine.MicChimeType.fromId("gentle_pulse"))
+        assertEquals(com.example.engine.MicChimeType.MUTE, com.example.engine.MicChimeType.fromId("mute"))
+        // Fallback to futuristic for unknown id
+        assertEquals(com.example.engine.MicChimeType.FUTURISTIC, com.example.engine.MicChimeType.fromId("unknown"))
+    }
+
+    @Test
+    fun testVoiceMathConverter_percentageAndCurrency() {
+        val pctResult = com.example.engine.VoiceMathConverter.processMathOrConversion("2500 का 18%")
+        org.junit.Assert.assertNotNull(pctResult)
+        org.junit.Assert.assertTrue(pctResult!!.contains("450"))
+
+        val currencyResult = com.example.engine.VoiceMathConverter.processMathOrConversion("50 डॉलर में कितने रुपये")
+        org.junit.Assert.assertNotNull(currencyResult)
+        org.junit.Assert.assertTrue(currencyResult!!.contains("रुपये"))
+
+        val divResult = com.example.engine.VoiceMathConverter.processMathOrConversion("3000 को 6 लोगों में बांटो")
+        org.junit.Assert.assertNotNull(divResult)
+        org.junit.Assert.assertTrue(divResult!!.contains("500"))
+    }
+
+    @Test
+    fun testMorningBriefingRecognition() {
+        org.junit.Assert.assertTrue(com.example.engine.MorningBriefingManager.isMorningBriefingQuery("गुड मॉर्निंग स्नेहा"))
+        org.junit.Assert.assertTrue(com.example.engine.MorningBriefingManager.isMorningBriefingQuery("good morning"))
+        org.junit.Assert.assertTrue(com.example.engine.MorningBriefingManager.isMorningBriefingQuery("मॉर्निंग ब्रीफिंग"))
+        org.junit.Assert.assertFalse(com.example.engine.MorningBriefingManager.isMorningBriefingQuery("टॉर्च जलाओ"))
+    }
+
+    @Test
+    fun testEmergencySosRecognition() {
+        org.junit.Assert.assertTrue(com.example.engine.EmergencySosManager.isEmergencySosQuery("स्नेहा मुझे बचाओ"))
+        org.junit.Assert.assertTrue(com.example.engine.EmergencySosManager.isEmergencySosQuery("हेल्प मी"))
+        org.junit.Assert.assertTrue(com.example.engine.EmergencySosManager.isEmergencySosQuery("इमरजेंसी लोकेशन भेजो"))
+        org.junit.Assert.assertFalse(com.example.engine.EmergencySosManager.isEmergencySosQuery("गाना बजाओ"))
+    }
+
+    @Test
+    fun testSnehaAppThemes_allThemes() {
+        val themes = com.example.ui.theme.SnehaAppTheme.entries
+        org.junit.Assert.assertEquals(4, themes.size)
+        org.junit.Assert.assertEquals(com.example.ui.theme.SnehaAppTheme.CYBERPUNK, com.example.ui.theme.SnehaAppTheme.fromId("cyberpunk"))
+        org.junit.Assert.assertEquals(com.example.ui.theme.SnehaAppTheme.SWEET_ROSE, com.example.ui.theme.SnehaAppTheme.fromId("sweet_rose"))
+        org.junit.Assert.assertEquals(com.example.ui.theme.SnehaAppTheme.AMOLED_DARK, com.example.ui.theme.SnehaAppTheme.fromId("amoled_dark"))
+        org.junit.Assert.assertEquals(com.example.ui.theme.SnehaAppTheme.ROYAL_EMERALD, com.example.ui.theme.SnehaAppTheme.fromId("royal_emerald"))
     }
 }

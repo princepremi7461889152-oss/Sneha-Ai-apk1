@@ -186,6 +186,8 @@ fun MainScreen(
             // Speak response via TTS reliably
             if (isVoiceOutputEnabled) {
                 voiceManager.speak(cmdResult.spokenResponse)
+            } else {
+                voiceManager.scheduleContinuousListenResume(100L)
             }
 
             // Handle actions that change screen or hardware state
@@ -409,12 +411,13 @@ fun MainScreen(
                                 currentScreen = SnehaScreen.AI_CONNECTOR
                             },
                             onMicClick = {
-                                if (voiceState == VoiceState.LISTENING) {
-                                    voiceManager.stopListening()
-                                } else if (voiceState == VoiceState.SPEAKING) {
+                                if (voiceState == VoiceState.SPEAKING) {
                                     voiceManager.stopSpeaking()
+                                    voiceManager.setContinuousListening(true)
+                                    voiceManager.startListening(playChime = true)
                                 } else {
-                                    voiceManager.startListening()
+                                    voiceManager.setContinuousListening(true)
+                                    voiceManager.startListening(playChime = true)
                                 }
                             },
                             onSendMessage = { query -> executeUserQuery(query) },

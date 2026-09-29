@@ -23,6 +23,8 @@ object BackgroundSpeaker : TextToSpeech.OnInitListener {
     private val _isSpeaking = MutableStateFlow(false)
     val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
 
+    var onSpeechDone: (() -> Unit)? = null
+
     var isAutoReadMessagesEnabled = true
     var speechRate = 1.0f
     var speechPitch = 1.05f
@@ -106,10 +108,16 @@ object BackgroundSpeaker : TextToSpeech.OnInitListener {
 
                 override fun onDone(utteranceId: String?) {
                     _isSpeaking.value = false
+                    try {
+                        onSpeechDone?.invoke()
+                    } catch (ignored: Exception) {}
                 }
 
                 override fun onError(utteranceId: String?) {
                     _isSpeaking.value = false
+                    try {
+                        onSpeechDone?.invoke()
+                    } catch (ignored: Exception) {}
                 }
             })
             Log.d(TAG, "Background TTS initialized successfully")

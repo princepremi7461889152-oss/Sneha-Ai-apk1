@@ -295,12 +295,14 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         SnehaVoiceService.pauseListeningForForeground(this)
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            voiceSpeechManager.setContinuousListening(true)
             voiceSpeechManager.startListening()
         }
     }
 
     override fun onPause() {
         super.onPause()
+        voiceSpeechManager.stopListening()
         SnehaVoiceService.resumeListeningFromForeground(this)
     }
 

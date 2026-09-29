@@ -186,15 +186,15 @@ fun AssistantScreen(
                             VoiceState.LISTENING -> "$currentUserName, सुन रही हूँ... 🎙️"
                             VoiceState.SPEAKING -> "$currentUserName, बोल रही हूँ... 🔊"
                             VoiceState.THINKING -> "$currentUserName, सोच रही हूँ... ⚡"
-                            VoiceState.ERROR -> "$currentUserName, वॉयस एरर ठीक हुआ"
-                            VoiceState.IDLE -> "$currentUserName, मैं हाजिर हूँ • बोलिए"
+                            VoiceState.ERROR -> "$currentUserName, सुन रही हूँ... 🎙️"
+                            VoiceState.IDLE -> "$currentUserName, माइक लगातार चालू है • बोलिए 🎙️"
                         },
                         fontSize = 11.sp,
                         color = when (voiceState) {
                             VoiceState.LISTENING -> SnehaCyan
                             VoiceState.SPEAKING -> SnehaPurple
                             VoiceState.THINKING -> SnehaPink
-                            else -> SnehaTextSecondary
+                            else -> SnehaCyan
                         }
                     )
                 }
@@ -303,6 +303,28 @@ fun AssistantScreen(
                     amplitude = audioAmplitude,
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                Row(
+                    modifier = Modifier
+                        .padding(top = 6.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(SnehaCyan.copy(alpha = 0.12f))
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .background(SnehaCyan, CircleShape)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "माइक लगातार ऑन • बैकग्राउंड व लॉकस्क्रीन में भी सक्रिय",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SnehaCyan
+                    )
+                }
 
                 AnimatedVisibility(visible = spokenTextLive.isNotBlank()) {
                     Box(

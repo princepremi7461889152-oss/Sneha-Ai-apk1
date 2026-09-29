@@ -79,6 +79,15 @@ object ClassTimetableManager {
         return isActiveNow
     }
 
+    fun getTodayLectures(): List<ClassLecture> {
+        return try {
+            val today = LocalDate.now().dayOfWeek
+            _lectures.value.filter { it.dayOfWeek == today }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     /**
      * Returns the currently active lecture, if any
      */

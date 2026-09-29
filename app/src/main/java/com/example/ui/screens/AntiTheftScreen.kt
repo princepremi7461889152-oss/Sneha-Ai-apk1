@@ -261,18 +261,19 @@ fun AntiTheftScreen(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("अनधिकृत फोन पिकअप सायरन", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SnehaTextPrimary)
+                                    Text("फोन पिकअप / मोशन सायरन", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SnehaTextPrimary)
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Surface(color = Color(0xFFFF3366).copy(alpha = 0.2f), shape = RoundedCornerShape(4.dp)) {
-                                        Text("मुख्य फीचर", fontSize = 9.sp, color = Color(0xFFFF3366), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                                    Surface(color = SnehaCyan.copy(alpha = 0.2f), shape = RoundedCornerShape(4.dp)) {
+                                        Text("हटाया गया", fontSize = 9.sp, color = SnehaCyan, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
                                     }
                                 }
-                                Text("मेरे अलावा कोई और फोन ले तो इमरजेंसी सायरन ऑन हो और बोलने पर बंद हो", fontSize = 11.sp, color = SnehaTextSecondary)
+                                Text("फोन हिलने या उठाने पर सायरन बजना पूर्णतः बंद है। केवल गलत पिन पर अलार्म काम करेगा।", fontSize = 11.sp, color = SnehaTextSecondary)
                             }
                         }
                         Switch(
-                            checked = isPickupArmed,
-                            onCheckedChange = { AntiTheftManager.setPickupSirenGuard(context, it) },
+                            checked = false,
+                            enabled = false,
+                            onCheckedChange = { },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color(0xFFFF3366),
                                 checkedTrackColor = Color(0xFFFF3366).copy(alpha = 0.3f)

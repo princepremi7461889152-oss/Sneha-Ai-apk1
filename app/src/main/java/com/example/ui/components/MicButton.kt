@@ -106,14 +106,13 @@ fun MicButton(
             contentAlignment = Alignment.Center
         ) {
             val icon = when {
-                isListening -> Icons.Default.Stop
                 isSpeaking -> Icons.Default.Stop
                 else -> Icons.Default.Mic
             }
 
             Icon(
                 imageVector = icon,
-                contentDescription = if (isListening) "माइक बंद करें" else "स्नेहा से बोलें",
+                contentDescription = if (isSpeaking) "आवाज रोकें" else "स्नेहा लगातार सुन रही है",
                 tint = Color.White,
                 modifier = Modifier.size(34.dp)
             )

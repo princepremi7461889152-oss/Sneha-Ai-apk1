@@ -76,16 +76,51 @@ object SnehaCommandEngine {
             )
         }
 
-        // 1d. Direct Phone Call to anyone ("कॉल करो राहुल", "call 9876543210", "फोन लगाओ राहुल को")
-        val isDirectCall = (lower.startsWith("call ") || lower.startsWith("कॉल करो ") || lower.startsWith("फोन लगाओ ") ||
-                lower.startsWith("फोन करो ") || lower.contains("को कॉल करो") || lower.contains("को फोन लगाओ") || lower.contains("को फोन करो")) &&
-                !lower.contains("pick") && !lower.contains("पिक") && !lower.contains("उठा") && !lower.contains("काट") && !lower.contains("cut") && !lower.contains("reject")
+        // 1d. Direct Phone Call to anyone ("कॉल करो राहुल", "call 9876543210", "फोन लगाओ राहुल को", "कॉल लगाओ", "डायल करो")
+        val isDirectCall = (lower.contains("कॉल") || lower.contains("call") || lower.contains("फोन") || lower.contains("डायल") || lower.contains("dial")) &&
+                (lower.contains("लगा") || lower.contains("करो") || lower.contains("मिला") || lower.contains("dial") || lower.startsWith("call ") || lower.contains("to ")) &&
+                !lower.contains("pick") && !lower.contains("पिक") && !lower.contains("उठा") && !lower.contains("काट") && !lower.contains("cut") && !lower.contains("reject") && !lower.contains("रिजेक्ट") && !lower.contains("whatsapp") && !lower.contains("व्हाट्सएप")
         if (isDirectCall) {
-            val target = extractContactTarget(input, listOf("कॉल करो", "फोन लगाओ", "फोन करो", "call to", "call", "को कॉल करो", "को फोन लगाओ", "को फोन करो"))
+            val target = extractContactTarget(input, listOf("कॉल करो", "कॉल लगाओ", "फोन लगाओ", "फोन करो", "कॉल मिलाओ", "डायल करो", "call to", "call", "को कॉल करो", "को फोन लगाओ", "को फोन करो", "को कॉल लगाओ"))
             val (success, speech) = WhatsAppManager.makeDirectPhoneCall(context, target)
             return CommandResult(
                 spokenResponse = speech,
                 actionTaken = SnehaAction.ConversationalAnswer(speech)
+            )
+        }
+
+        // 1e. Emergency SOS Location Share ("स्नेहा मुझे बचाओ", "हेल्प मी", "इमरजेंसी लोकेशन भेजो")
+        if (EmergencySosManager.isEmergencySosQuery(lower)) {
+            val (success, speech) = EmergencySosManager.triggerEmergencySos(context)
+            return CommandResult(
+                spokenResponse = speech,
+                actionTaken = SnehaAction.ConversationalAnswer(speech)
+            )
+        }
+
+        // 1f. Morning Briefing Bulletin ("गुड मॉर्निंग स्नेहा", "morning briefing", "दिन का हाल")
+        if (MorningBriefingManager.isMorningBriefingQuery(lower)) {
+            val speech = MorningBriefingManager.generateMorningBriefing(context)
+            return CommandResult(
+                spokenResponse = speech,
+                actionTaken = SnehaAction.ConversationalAnswer(speech)
+            )
+        }
+
+        // 1g. Voice Math & Currency / Unit Converter ("2500 का 18%", "50 डॉलर", "5000 भाग 6")
+        VoiceMathConverter.processMathOrConversion(input)?.let { mathAnswer ->
+            return CommandResult(
+                spokenResponse = mathAnswer,
+                actionTaken = SnehaAction.ConversationalAnswer(mathAnswer)
+            )
+        }
+
+        // 1h. Voice Notes & Quick Reminders ("नोट लिखो", "याद रखना कि", "मेरे नोट्स सुनाओ")
+        if (VoiceNotesManager.isNoteQuery(lower)) {
+            val noteSpeech = VoiceNotesManager.processNoteVoiceCommand(context, input)
+            return CommandResult(
+                spokenResponse = noteSpeech,
+                actionTaken = SnehaAction.ConversationalAnswer(noteSpeech)
             )
         }
 
@@ -367,23 +402,14 @@ object SnehaCommandEngine {
             )
         }
 
-        // 7b. Anti-Intruder Pickup Siren Arm ("कोई और फोन ले तो सायरन बजाओ", "पिकअप सायरन ऑन करो", "डोंट टच फोन")
-        val isPickupSirenCommand = (lower.contains("कोई और") || lower.contains("फोन ले") || lower.contains("फोन उठाए") || lower.contains("पिकअप सायरन") || lower.contains("pickup siren") || lower.contains("डोंट टच"))
+        // 7b. Anti-Intruder Pickup Siren Notice (Shake siren removed by user request)
+        val isPickupSirenCommand = (lower.contains("कोई और") || lower.contains("फोन ले") || lower.contains("फोन उठाए") || lower.contains("पिकअप सायरन") || lower.contains("pickup siren") || lower.contains("डोंट टच") || lower.contains("हिलाने पर सायरन") || lower.contains("मोशन सायरन"))
         if (isPickupSirenCommand) {
-            val isOff = lower.contains("बंद") || lower.contains("off")
-            if (isOff) {
-                AntiTheftManager.setPickupSirenGuard(context, false)
-                return CommandResult(
-                    spokenResponse = "मास्टर, अनधिकृत पिकअप सायरन गार्ड बंद कर दिया गया है।",
-                    actionTaken = SnehaAction.OpenAntiTheft
-                )
-            } else {
-                AntiTheftManager.setPickupSirenGuard(context, true)
-                return CommandResult(
-                    spokenResponse = "मास्टर, अनधिकृत फोन पिकअप सायरन गार्ड चालू कर दिया गया है! अब आपके अलावा कोई भी फोन उठाएगा तो तुरंत इमरजेंसी सायरन बजेगा, और आपके 'सायरन बंद करो' बोलने पर ही बंद होगा।",
-                    actionTaken = SnehaAction.OpenAntiTheft
-                )
-            }
+            AntiTheftManager.setPickupSirenGuard(context, false)
+            return CommandResult(
+                spokenResponse = "मास्टर, फोन हिलने या उठाने पर सायरन बजने का फीचर आपके निर्देशानुसार स्थायी रूप से हटा दिया गया है ताकि फोन हिलाने या जेब में रखने पर कभी भी गलती से सायरन न बजे।",
+                actionTaken = SnehaAction.OpenAntiTheft
+            )
         }
 
         // 7c. Bluetooth Voice Control ("ब्लूटूथ ऑन करो", "ब्लूटूथ बंद करो", "bluetooth on", "bluetooth off")
@@ -524,6 +550,79 @@ object SnehaCommandEngine {
             }
         }
 
+        // 14a. Time & Date Commands ("समय बताओ", "टाइम क्या है", "आज की तारीख क्या है", "आज कौन सा दिन है")
+        if (lower.contains("समय") || lower.contains("टाइम") || lower.contains("time") || lower.contains("कितने बजे") ||
+            lower.contains("तारीख") || lower.contains("date") || lower.contains("आज का दिन") || lower.contains("कौन सा दिन")
+        ) {
+            val now = java.util.Calendar.getInstance()
+            val timeFormat = java.text.SimpleDateFormat("hh:mm a", java.util.Locale("hi", "IN"))
+            val dateFormat = java.text.SimpleDateFormat("EEEE, d MMMM yyyy", java.util.Locale("hi", "IN"))
+            val currentTime = timeFormat.format(now.time)
+            val currentDate = dateFormat.format(now.time)
+            val responseText = "मास्टर, अभी समय $currentTime हुआ है, और आज $currentDate है।"
+            return CommandResult(
+                spokenResponse = responseText,
+                actionTaken = SnehaAction.ConversationalAnswer(responseText)
+            )
+        }
+
+        // 14b. Camera Quick Action ("कैमरा खोलो", "कैमरा चालू करो", "फोटो खींचो", "open camera")
+        if (lower.contains("camera") || lower.contains("कैमरा") || lower.contains("फोटो खींचो") || lower.contains("सेल्फी")) {
+            val (success, msg) = PhoneControlManager.openAppByName(context, "camera")
+            val resp = if (success) "मास्टर, $msg" else "मास्टर, कैमरा खोला जा रहा है।"
+            return CommandResult(spokenResponse = resp, actionTaken = SnehaAction.OpenApp("Camera", ""))
+        }
+
+        // 14c. Music & Songs ("गाना बजाओ", "गाना चलाओ", "म्यूजिक चलाओ", "play music", "play song")
+        if (lower.contains("गाना") || lower.contains("music") || lower.contains("म्यूजिक") || lower.contains("song") || lower.contains("गीत")) {
+            val query = extractQuery(input, listOf("गाना बजाओ", "गाना चलाओ", "म्यूजिक चलाओ", "play music", "play song", "play"))
+            val finalQuery = if (query.isNotBlank()) query else "Top Bollywood Songs"
+            PhoneControlManager.searchYouTube(context, finalQuery)
+            return CommandResult(
+                spokenResponse = "मास्टर, यूट्यूब पर '$finalQuery' बजाया जा रहा है।",
+                actionTaken = SnehaAction.SearchYouTube(finalQuery)
+            )
+        }
+
+        // 14d. Jokes & Fun ("जोक सुनाओ", "चुटकुला सुनाओ", "tell a joke", "हंसाओ")
+        if (lower.contains("जोक") || lower.contains("चुटकुला") || lower.contains("हंसाओ") || lower.contains("joke")) {
+            val jokes = listOf(
+                "मास्टर, एक बार पिंटू ने डॉक्टर से पूछा - क्या आप मेरी बीमारी ठीक कर देंगे? डॉक्टर बोला - जरूर, लेकिन जो दवाई लिखूँगा उसे रोज समय पर खाइएगा। पिंटू बोला - डॉक्टर साहब, मैं तो यहाँ चाय बिस्किट खाने आया था!",
+                "मास्टर, संता ने भगवान से प्रार्थना की - हे भगवान, मुझे इतनी शक्ति दो कि जब मेरा फोन गिरे तो दिल न धड़के, बल्कि फोन मुस्कुराए!",
+                "मास्टर, टीचर ने गोलू से पूछा - बताओ न्यूटन का चौथा नियम क्या है? गोलू बोला - सर, जब परीक्षा में प्रश्न समझ न आए, तो आँखें बंद करके 'हे प्रभु' बोलो!"
+            )
+            val selectedJoke = jokes.random()
+            return CommandResult(
+                spokenResponse = selectedJoke,
+                actionTaken = SnehaAction.ConversationalAnswer(selectedJoke)
+            )
+        }
+
+        // 14e. Calculator Quick Action ("कैलकुलेटर खोलो", "open calculator", "हिसाब किताब")
+        if (lower.contains("कैलकुलेटर") || lower.contains("calculator") || lower.contains("हिसाब")) {
+            PhoneControlManager.openAppByName(context, "calculator")
+            return CommandResult(
+                spokenResponse = "मास्टर, कैलकुलेटर खोला जा रहा है।",
+                actionTaken = SnehaAction.OpenApp("Calculator", "")
+            )
+        }
+
+        // 14f. Google Web Search ("गूगल पर सर्च करो", "सर्च करो", "search on google")
+        if (lower.contains("गूगल पर सर्च") || lower.contains("गूगल में सर्च") || lower.contains("google search") || lower.startsWith("सर्च करो ") || lower.startsWith("search ")) {
+            val query = extractQuery(input, listOf("गूगल पर सर्च करो", "गूगल में सर्च करो", "गूगल सर्च", "search on google for", "google search", "सर्च करो", "search"))
+            val searchIntent = android.content.Intent(android.content.Intent.ACTION_WEB_SEARCH).apply {
+                putExtra(android.app.SearchManager.QUERY, query)
+                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            try {
+                context.startActivity(searchIntent)
+            } catch (ignored: Exception) {}
+            return CommandResult(
+                spokenResponse = "मास्टर, गूगल पर '$query' खोजा जा रहा है।",
+                actionTaken = SnehaAction.ConversationalAnswer("मास्टर, गूगल पर '$query' खोजा जा रहा है।")
+            )
+        }
+
         // 15. General Conversational / AI Query with Gemini API (Always addressing as user's chosen title)
         val aiResponse = GeminiApiClient.getSnehaAiResponse(input)
         val formattedResponse = if (!aiResponse.contains(userTitle, ignoreCase = true) && !aiResponse.contains("मास्टर")) {
@@ -563,7 +662,11 @@ object SnehaCommandEngine {
             .replace("पर", "")
             .replace("करो", "")
             .replace("लगाओ", "")
+            .replace("लगा", "")
             .replace("मिलाओ", "")
+            .replace("मिला", "")
+            .replace("डायल", "")
+            .replace("dial", "", ignoreCase = true)
             .replace("call", "", ignoreCase = true)
             .replace("please", "", ignoreCase = true)
             .trim()

@@ -46,7 +46,7 @@ class VoiceSpeechManager(private val context: Context) : TextToSpeech.OnInitList
     private val _spokenTextLive = MutableStateFlow("")
     val spokenTextLive: StateFlow<String> = _spokenTextLive.asStateFlow()
 
-    private val _isContinuousListening = MutableStateFlow(true)
+    private val _isContinuousListening = MutableStateFlow(VoicePreferences.isContinuousListeningEnabled(context))
     val isContinuousListening: StateFlow<Boolean> = _isContinuousListening.asStateFlow()
 
     var onSpeechRecognized: ((String) -> Unit)? = null
@@ -144,16 +144,16 @@ class VoiceSpeechManager(private val context: Context) : TextToSpeech.OnInitList
                 }
 
                 override fun onDone(utteranceId: String?) {
-                    _voiceState.value = VoiceState.IDLE
+                    _voiceState.value = if (_isContinuousListening.value) VoiceState.LISTENING else VoiceState.IDLE
                     _audioAmplitude.value = 0f
-                    // If continuous mode is on, resume listening automatically
-                    scheduleContinuousListenResume()
+                    // Immediately resume continuous listening
+                    scheduleContinuousListenResume(100L)
                 }
 
                 override fun onError(utteranceId: String?) {
-                    _voiceState.value = VoiceState.IDLE
+                    _voiceState.value = if (_isContinuousListening.value) VoiceState.LISTENING else VoiceState.IDLE
                     _audioAmplitude.value = 0f
-                    scheduleContinuousListenResume()
+                    scheduleContinuousListenResume(100L)
                 }
             })
 
@@ -173,7 +173,7 @@ class VoiceSpeechManager(private val context: Context) : TextToSpeech.OnInitList
 
     fun playWakeBeep() {
         try {
-            toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 120)
+            MicChimeManager.playChime(context)
         } catch (ignored: Exception) {}
     }
 
@@ -236,36 +236,32 @@ class VoiceSpeechManager(private val context: Context) : TextToSpeech.OnInitList
                 _audioAmplitude.value = 0f
                 isRecognizerBusy = false
 
-                // Error Code 5 = ERROR_CLIENT (Client state conflict or rapid re-initialization)
-                // Error Code 11 = ERROR_SERVER_DISCONNECTED (API 31+ background Google Speech Service disconnect)
+                // Keep state in LISTENING in continuous mode so UI doesn't flicker or switch off
+                if (_isContinuousListening.value) {
+                    _voiceState.value = VoiceState.LISTENING
+                } else {
+                    _voiceState.value = VoiceState.IDLE
+                }
+
                 when (error) {
                     SpeechRecognizer.ERROR_NO_MATCH,
                     SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
-                        // User paused speaking or silence detected - stay in LISTENING without blinking off
+                        // User paused speaking or brief silence - immediately resume without turning off
                         if (_isContinuousListening.value) {
-                            _voiceState.value = VoiceState.LISTENING
-                            scheduleContinuousListenResume(50L)
-                        } else {
-                            _voiceState.value = VoiceState.IDLE
+                            scheduleContinuousListenResume(60L)
                         }
                     }
                     SpeechRecognizer.ERROR_CLIENT -> { // Code 5
                         recreateRecognizer()
                         if (_isContinuousListening.value) {
-                            _voiceState.value = VoiceState.LISTENING
-                            scheduleContinuousListenResume(150L)
-                        } else {
-                            _voiceState.value = VoiceState.IDLE
+                            scheduleContinuousListenResume(120L)
                         }
                     }
                     11, // SpeechRecognizer.ERROR_SERVER_DISCONNECTED
                     SpeechRecognizer.ERROR_SERVER -> {
                         recreateRecognizer()
                         if (_isContinuousListening.value) {
-                            _voiceState.value = VoiceState.LISTENING
-                            scheduleContinuousListenResume(300L)
-                        } else {
-                            _voiceState.value = VoiceState.IDLE
+                            scheduleContinuousListenResume(200L)
                         }
                     }
                     SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> { // Code 8
@@ -274,10 +270,7 @@ class VoiceSpeechManager(private val context: Context) : TextToSpeech.OnInitList
                         } catch (ignored: Exception) {}
                         isRecognizerBusy = false
                         if (_isContinuousListening.value) {
-                            _voiceState.value = VoiceState.LISTENING
-                            scheduleContinuousListenResume(150L)
-                        } else {
-                            _voiceState.value = VoiceState.IDLE
+                            scheduleContinuousListenResume(120L)
                         }
                     }
                     SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> { // Code 9
@@ -287,27 +280,20 @@ class VoiceSpeechManager(private val context: Context) : TextToSpeech.OnInitList
                     SpeechRecognizer.ERROR_AUDIO -> { // Code 3
                         recreateRecognizer()
                         if (_isContinuousListening.value) {
-                            _voiceState.value = VoiceState.LISTENING
-                            scheduleContinuousListenResume(400L)
-                        } else {
-                            _voiceState.value = VoiceState.IDLE
+                            scheduleContinuousListenResume(200L)
                         }
                     }
                     SpeechRecognizer.ERROR_NETWORK,
                     SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> {
                         if (_isContinuousListening.value) {
-                            scheduleContinuousListenResume(1500L)
+                            scheduleContinuousListenResume(800L)
                         } else {
-                            _voiceState.value = VoiceState.IDLE
                             onSpeechError?.invoke("इंटरनेट या वॉयस सर्विस कनेक्शन जांचें।")
                         }
                     }
                     else -> {
                         if (_isContinuousListening.value) {
-                            _voiceState.value = VoiceState.LISTENING
-                            scheduleContinuousListenResume(200L)
-                        } else {
-                            _voiceState.value = VoiceState.IDLE
+                            scheduleContinuousListenResume(120L)
                         }
                     }
                 }
@@ -326,7 +312,7 @@ class VoiceSpeechManager(private val context: Context) : TextToSpeech.OnInitList
                     handleRecognizedText(text)
                 } else if (_isContinuousListening.value) {
                     _voiceState.value = VoiceState.LISTENING
-                    scheduleContinuousListenResume(50L)
+                    scheduleContinuousListenResume(60L)
                 } else {
                     _voiceState.value = VoiceState.IDLE
                 }
@@ -342,7 +328,12 @@ class VoiceSpeechManager(private val context: Context) : TextToSpeech.OnInitList
         }
     }
 
-    fun startListening() {
+    fun startListening(playChime: Boolean = false) {
+        if (playChime) {
+            try {
+                MicChimeManager.playChime(context)
+            } catch (ignored: Exception) {}
+        }
         restartListeningJob?.cancel()
         if (isSpeaking()) {
             stopSpeaking()
@@ -360,10 +351,16 @@ class VoiceSpeechManager(private val context: Context) : TextToSpeech.OnInitList
             return
         }
 
-        // Cancel previous active recognition session safely if still busy
-        try {
-            recognizer.cancel()
-        } catch (ignored: Exception) {}
+        // Keep VoiceState in LISTENING so the mic UI stays continuously active
+        _voiceState.value = VoiceState.LISTENING
+
+        // Only cancel previous active recognition session if it is actively running
+        if (isRecognizerBusy) {
+            try {
+                recognizer.cancel()
+            } catch (ignored: Exception) {}
+            isRecognizerBusy = false
+        }
 
         val customWake = VoicePreferences.getCustomWakeWord(context)
         val promptText = if (customWake.equals("स्नेता", ignoreCase = true) || customWake.equals("स्नेहा", ignoreCase = true)) {
@@ -386,12 +383,13 @@ class VoiceSpeechManager(private val context: Context) : TextToSpeech.OnInitList
             recognizer.startListening(intent)
             isRecognizerBusy = true
         } catch (e: Exception) {
-            _voiceState.value = VoiceState.IDLE
             isRecognizerBusy = false
             Log.w(tag, "SpeechRecognizer startListening failed: ${e.message}")
             recreateRecognizer()
             if (_isContinuousListening.value) {
-                scheduleContinuousListenResume(1200L)
+                scheduleContinuousListenResume(250L)
+            } else {
+                _voiceState.value = VoiceState.IDLE
             }
         }
     }
@@ -426,25 +424,19 @@ class VoiceSpeechManager(private val context: Context) : TextToSpeech.OnInitList
         if (isJustCalling) {
             playWakeBeep()
             onWakeWordDetected?.invoke()
-            val greetingName = if (customWake.isNotBlank() && customWake != "स्नेहा") customWake else "स्नेहा"
             speak("जी मास्टर! मैं हाजिर हूँ, आज्ञा दीजिए!")
-            // Wait for speech to finish then listen for follow-up command
-            scope.launch {
-                delay(2200)
-                startListening()
-            }
         } else {
             // Full command recognized
             onSpeechRecognized?.invoke(text)
         }
     }
 
-    private fun scheduleContinuousListenResume(delayMs: Long = 1200L) {
+    fun scheduleContinuousListenResume(delayMs: Long = 100L) {
         if (!_isContinuousListening.value) return
         restartListeningJob?.cancel()
         restartListeningJob = scope.launch {
             delay(delayMs)
-            if (_voiceState.value == VoiceState.IDLE && !isSpeaking()) {
+            if (!isSpeaking() && _isContinuousListening.value) {
                 startListening()
             }
         }
@@ -456,11 +448,12 @@ class VoiceSpeechManager(private val context: Context) : TextToSpeech.OnInitList
 
     fun setContinuousListening(enabled: Boolean) {
         _isContinuousListening.value = enabled
+        VoicePreferences.saveContinuousListeningEnabled(context, enabled)
         if (!enabled) {
             restartListeningJob?.cancel()
             stopListening()
         } else {
-            if (_voiceState.value == VoiceState.IDLE) {
+            if (!isSpeaking()) {
                 startListening()
             }
         }

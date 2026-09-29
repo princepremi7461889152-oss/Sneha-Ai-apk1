@@ -41,6 +41,7 @@ class SnehaVoiceService : Service() {
     private var speechRecognizer: SpeechRecognizer? = null
     private var isListeningForWakeWord = false
     private var toneGenerator: ToneGenerator? = null
+    private var wakeLock: android.os.PowerManager.WakeLock? = null
 
     companion object {
         const val CHANNEL_ID = "sneha_voice_channel_v2"
@@ -64,7 +65,11 @@ class SnehaVoiceService : Service() {
                 val intent = Intent(context, SnehaVoiceService::class.java).apply {
                     action = ACTION_PAUSE_FOR_FOREGROUND
                 }
-                context.startService(intent)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
             } catch (ignored: Exception) {}
         }
 
@@ -77,7 +82,11 @@ class SnehaVoiceService : Service() {
                 val intent = Intent(context, SnehaVoiceService::class.java).apply {
                     action = ACTION_RESUME_FROM_FOREGROUND
                 }
-                context.startService(intent)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
             } catch (ignored: Exception) {}
         }
 
@@ -121,6 +130,15 @@ class SnehaVoiceService : Service() {
         super.onCreate()
         createNotificationChannel()
         BackgroundSpeaker.initialize(this)
+        BackgroundSpeaker.onSpeechDone = {
+            if (isListeningForWakeWord) {
+                mainHandler.postDelayed({ restartListeningInternal() }, 200L)
+            }
+        }
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+            wakeLock = pm?.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "Sneha:VoiceServiceWakeLock")
+        } catch (ignored: Exception) {}
         try {
             toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 85)
         } catch (ignored: Exception) {}
@@ -128,29 +146,11 @@ class SnehaVoiceService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
-        when (action) {
-            ACTION_STOP_SERVICE -> {
-                stopWakeWordListening()
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
-                return START_NOT_STICKY
-            }
-            ACTION_PAUSE_FOR_FOREGROUND -> {
-                stopWakeWordListening()
-                return START_STICKY
-            }
-            ACTION_RESUME_FROM_FOREGROUND -> {
-                val hasMicPermission = ContextCompat.checkSelfPermission(
-                    this, Manifest.permission.RECORD_AUDIO
-                ) == PackageManager.PERMISSION_GRANTED
-                if (hasMicPermission && !isListeningForWakeWord) {
-                    startWakeWordListening()
-                }
-                return START_STICKY
-            }
-            ACTION_READ_MESSAGES -> {
-                readRecentMessagesAloud()
-            }
+        if (action == ACTION_STOP_SERVICE) {
+            stopWakeWordListening()
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
         }
 
         val hasMicPermission = ContextCompat.checkSelfPermission(
@@ -163,9 +163,9 @@ class SnehaVoiceService : Service() {
             return START_NOT_STICKY
         }
 
-        val notification = buildForegroundNotification()
-
+        // Unconditionally attach foreground notification immediately to satisfy Android OS requirements
         try {
+            val notification = buildForegroundNotification()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
             } else {
@@ -173,14 +173,29 @@ class SnehaVoiceService : Service() {
             }
         } catch (e: Exception) {
             Log.e("SnehaVoiceService", "startForeground error", e)
-            stopSelf()
-            return START_NOT_STICKY
         }
 
-        // Start Siri-like background wake-word listening
-        startWakeWordListening()
-
-        return START_STICKY
+        when (action) {
+            ACTION_PAUSE_FOR_FOREGROUND -> {
+                stopWakeWordListening()
+                return START_STICKY
+            }
+            ACTION_READ_MESSAGES -> {
+                readRecentMessagesAloud()
+                startWakeWordListening()
+                return START_STICKY
+            }
+            ACTION_RESUME_FROM_FOREGROUND,
+            ACTION_START_SERVICE,
+            null -> {
+                startWakeWordListening()
+                return START_STICKY
+            }
+            else -> {
+                startWakeWordListening()
+                return START_STICKY
+            }
+        }
     }
 
     private fun startWakeWordListening() {
@@ -189,6 +204,13 @@ class SnehaVoiceService : Service() {
         ) == PackageManager.PERMISSION_GRANTED
         if (!hasMic || !SpeechRecognizer.isRecognitionAvailable(this)) return
         isListeningForWakeWord = true
+
+        // Hold partial wake lock so CPU continues listening in sleep/lockscreen
+        if (wakeLock?.isHeld != true) {
+            try {
+                wakeLock?.acquire(12 * 60 * 60 * 1000L)
+            } catch (ignored: Exception) {}
+        }
 
         mainHandler.post {
             try {
@@ -205,77 +227,181 @@ class SnehaVoiceService : Service() {
                         override fun onEndOfSpeech() {}
 
                         override fun onError(error: Int) {
-                            if (isListeningForWakeWord) {
-                                // Restart listening in a polite loop
-                                mainHandler.postDelayed({ restartListeningInternal() }, 1500)
+                            if (!isListeningForWakeWord) return
+                            when (error) {
+                                SpeechRecognizer.ERROR_NO_MATCH,
+                                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
+                                    // Immediate polite loop restart
+                                    mainHandler.postDelayed({ restartListeningInternal() }, 100L)
+                                }
+                                SpeechRecognizer.ERROR_CLIENT,
+                                SpeechRecognizer.ERROR_RECOGNIZER_BUSY,
+                                SpeechRecognizer.ERROR_SERVER,
+                                11, // SpeechRecognizer.ERROR_SERVER_DISCONNECTED
+                                SpeechRecognizer.ERROR_AUDIO -> {
+                                    try {
+                                        speechRecognizer?.cancel()
+                                        speechRecognizer?.destroy()
+                                    } catch (ignored: Exception) {}
+                                    speechRecognizer = null
+                                    mainHandler.postDelayed({
+                                        if (isListeningForWakeWord) startWakeWordListening()
+                                    }, 250L)
+                                }
+                                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
+                                    isListeningForWakeWord = false
+                                }
+                                else -> {
+                                    mainHandler.postDelayed({ restartListeningInternal() }, 200L)
+                                }
                             }
                         }
 
                         override fun onResults(results: Bundle?) {
                             val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                            val text = matches?.firstOrNull()?.lowercase()?.trim() ?: ""
+                            val text = matches?.firstOrNull()?.trim() ?: ""
 
-                            val hasWakeWord = text.contains("स्नेहा") || text.contains("sneha") ||
-                                    text.contains("hey sneha") || text.contains("सुनो स्नेहा") ||
-                                    text.contains("सुनो") || text.contains("siri") ||
-                                    text.contains("हेलो स्नेहा") || text.contains("नमस्ते स्नेहा")
-
-                            if (hasWakeWord) {
-                                onWakeWordTriggered()
+                            if (text.isNotBlank()) {
+                                handleBackgroundCommand(text)
                             } else if (isListeningForWakeWord) {
-                                mainHandler.postDelayed({ restartListeningInternal() }, 800)
+                                mainHandler.postDelayed({ restartListeningInternal() }, 100L)
                             }
                         }
 
-                        override fun onPartialResults(partialResults: Bundle?) {
-                            val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                            val text = matches?.firstOrNull()?.lowercase()?.trim() ?: ""
-                            if (text.contains("स्नेहा") || text.contains("sneha") || text.contains("सुनो स्नेहा")) {
-                                onWakeWordTriggered()
-                            }
-                        }
+                        override fun onPartialResults(partialResults: Bundle?) {}
 
                         override fun onEvent(eventType: Int, params: Bundle?) {}
                     })
                 }
                 restartListeningInternal()
             } catch (e: Exception) {
-                Log.e("SnehaVoiceService", "Error setting up wake word listener", e)
+                Log.e("SnehaVoiceService", "Error setting up background voice listener", e)
             }
         }
     }
 
     private fun restartListeningInternal() {
         if (!isListeningForWakeWord) return
-        try {
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "hi-IN")
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+        if (BackgroundSpeaker.isSpeaking.value) {
+            // Wait for speaking to finish
+            return
+        }
+        mainHandler.post {
+            try {
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "hi-IN")
+                    putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf("hi-IN", "en-IN", "en-US"))
+                    putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
+                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                }
+                speechRecognizer?.startListening(intent)
+            } catch (e: Exception) {
+                Log.w("SnehaVoiceService", "restartListeningInternal exception", e)
+                try {
+                    speechRecognizer?.destroy()
+                } catch (ignored: Exception) {}
+                speechRecognizer = null
+                mainHandler.postDelayed({
+                    if (isListeningForWakeWord) startWakeWordListening()
+                }, 300L)
             }
-            speechRecognizer?.startListening(intent)
-        } catch (e: Exception) {
-            mainHandler.postDelayed({ restartListeningInternal() }, 2000)
         }
     }
 
-    private fun onWakeWordTriggered() {
+    private fun handleBackgroundCommand(text: String) {
+        val lower = text.lowercase().trim()
+        val customWake = com.example.data.local.VoicePreferences.getCustomWakeWord(this).lowercase().trim()
+
+        val isJustCalling = lower == "स्नेहा" || lower == "sneha" || lower == "hey sneha" ||
+                lower == "हे स्नेहा" || lower == "सुनो स्नेहा" || lower == "सुनो" ||
+                lower == "hello sneha" || lower == "hi sneha" || lower == "ok sneha" ||
+                lower == "siri" || lower == "alexa" || lower == "हेलो स्नेहा" ||
+                (customWake.isNotBlank() && lower == customWake)
+
         try {
-            toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 120)
+            com.example.engine.MicChimeManager.playChime(applicationContext)
         } catch (ignored: Exception) {}
 
-        // 1. Wake screen and bring activity to front over lockscreen
-        LockScreenHelper.wakeUpScreen(applicationContext, 10000L)
-        LockScreenHelper.launchOverLockScreen(applicationContext, startVoiceMic = true)
+        if (isJustCalling) {
+            LockScreenHelper.wakeUpScreen(applicationContext, 8000L)
+            BackgroundSpeaker.speak("जी मास्टर! मैं हाजिर हूँ, आज्ञा दीजिए! मैं लगातार सुन रही हूँ, आप जो कहेंगे मैं वही करूँगी।")
+            return
+        }
 
-        // 2. Announce ready to Master
-        BackgroundSpeaker.speak("जी मास्टर! मैं हाजिर हूँ, आज्ञा दीजिए!")
+        // Strip wake prefix if command was e.g. "स्नेहा टॉर्च जलाओ"
+        var cleanInput = text
+        val wakePrefixes = listOf(
+            "हे स्नेहा", "hey sneha", "सुनो स्नेहा", "hello sneha", "hi sneha", "ok sneha",
+            "स्नेहा", "sneha", customWake
+        )
+        for (wp in wakePrefixes) {
+            if (wp.isNotBlank() && cleanInput.startsWith(wp, ignoreCase = true)) {
+                cleanInput = cleanInput.substring(wp.length).trim()
+                break
+            }
+        }
+        if (cleanInput.isBlank()) {
+            cleanInput = text
+        }
+
+        serviceScope.launch(Dispatchers.IO) {
+            try {
+                val db = SnehaDatabase.getInstance(applicationContext)
+                // 1. Record user command in chat history
+                db.chatMessageDao().insertMessage(
+                    com.example.data.local.ChatMessageEntity(text = text, isUser = true)
+                )
+
+                // 2. Process command using SnehaCommandEngine in background
+                val cmdResult = com.example.engine.SnehaCommandEngine.processCommand(
+                    context = applicationContext,
+                    activity = null,
+                    rawInput = cleanInput
+                )
+
+                // 3. Record Sneha response in chat history
+                db.chatMessageDao().insertMessage(
+                    com.example.data.local.ChatMessageEntity(
+                        text = cmdResult.spokenResponse,
+                        isUser = false,
+                        isOtpMasked = cmdResult.isOtpRefusal
+                    )
+                )
+
+                // 4. Wake up screen so user sees action result
+                LockScreenHelper.wakeUpScreen(applicationContext, 8000L)
+                when (cmdResult.actionTaken) {
+                    is com.example.data.model.SnehaAction.UnlockPhone,
+                    is com.example.data.model.SnehaAction.OpenSecurityUnlock,
+                    is com.example.data.model.SnehaAction.EmergencyUnlockAndSos -> {
+                        LockScreenHelper.launchOverLockScreen(applicationContext, startVoiceMic = false)
+                    }
+                    else -> {}
+                }
+
+                // 5. Speak response aloud in background
+                if (cmdResult.spokenResponse.isNotBlank()) {
+                    BackgroundSpeaker.speak(cmdResult.spokenResponse)
+                } else {
+                    mainHandler.postDelayed({ restartListeningInternal() }, 400L)
+                }
+            } catch (e: Exception) {
+                Log.e("SnehaVoiceService", "Error executing background command", e)
+                BackgroundSpeaker.speak("मास्टर, आदेश का पालन करने में समस्या हुई।")
+            }
+        }
     }
 
     private fun stopWakeWordListening() {
         isListeningForWakeWord = false
         mainHandler.removeCallbacksAndMessages(null)
+        if (wakeLock?.isHeld == true) {
+            try {
+                wakeLock?.release()
+            } catch (ignored: Exception) {}
+        }
         try {
             speechRecognizer?.stopListening()
             speechRecognizer?.destroy()

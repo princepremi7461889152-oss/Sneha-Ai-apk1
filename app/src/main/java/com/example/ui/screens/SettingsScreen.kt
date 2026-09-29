@@ -359,6 +359,13 @@ private fun VoiceAndUserTab(
 
     var customWakeWord by remember { mutableStateOf(VoicePreferences.getCustomWakeWord(context)) }
     var wakeWordInput by remember { mutableStateOf("") }
+    var activeMicChime by remember { mutableStateOf(VoicePreferences.getMicChimeType(context)) }
+    var activeTheme by remember { mutableStateOf(com.example.ui.theme.SnehaAppTheme.getSavedTheme(context)) }
+    var isBubbleRunning by remember { mutableStateOf(com.example.service.SnehaFloatingBubbleService.isRunning) }
+    var sosName by remember { mutableStateOf(com.example.engine.EmergencySosManager.getEmergencyContactName(context)) }
+    var sosPhone by remember { mutableStateOf(com.example.engine.EmergencySosManager.getEmergencyContactPhone(context)) }
+    var notesList by remember { mutableStateOf(com.example.engine.VoiceNotesManager.getAllNotes(context)) }
+    var newNoteInput by remember { mutableStateOf("") }
 
     var customTestSentence by remember { mutableStateOf("नमस्ते $customUserName! मैं स्नेहा हूँ, आपकी महिला AI असिस्टेंट।") }
 
@@ -682,6 +689,501 @@ private fun VoiceAndUserTab(
                             shape = RoundedCornerShape(10.dp)
                         ) {
                             Text("सेव", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3b. Mic Activation Sound Selection Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("card_mic_chime_sound"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = SnehaDarkSurface),
+                border = BorderStroke(1.5.dp, SnehaCyan)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(SnehaCyan.copy(alpha = 0.2f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("🔔", fontSize = 20.sp)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "माइक ओपन साउंड (Mic Activation Sound) 🎙️",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SnehaTextPrimary
+                            )
+                            Text(
+                                text = "सक्रिय: ${activeMicChime.displayName} ${activeMicChime.emoji}",
+                                fontSize = 12.sp,
+                                color = SnehaCyan,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "माइक ऑन होने पर बजने वाला साउंड चुनें। सुनने और सेट करने के लिए किसी भी विकल्प पर टैप करें:",
+                        fontSize = 11.sp,
+                        color = SnehaTextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        com.example.engine.MicChimeType.entries.forEach { chime ->
+                            val isSelected = activeMicChime == chime
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    activeMicChime = chime
+                                    com.example.data.local.VoicePreferences.saveMicChimeType(context, chime)
+                                    com.example.engine.MicChimeManager.playSpecificChime(chime)
+                                    Toast.makeText(context, "${chime.displayName} सेट किया गया", Toast.LENGTH_SHORT).show()
+                                },
+                                label = {
+                                    Text(
+                                        text = "${chime.emoji} ${chime.displayName}",
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = SnehaCyan.copy(alpha = 0.25f),
+                                    selectedLabelColor = SnehaCyan,
+                                    containerColor = SnehaDarkSurfaceVariant,
+                                    labelColor = SnehaTextSecondary
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = isSelected,
+                                    borderColor = SnehaDarkSurfaceVariant,
+                                    selectedBorderColor = SnehaCyan
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3c. Custom App Themes Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("card_app_themes"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = SnehaDarkSurface),
+                border = BorderStroke(1.5.dp, SnehaPurple)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(SnehaPurple.copy(alpha = 0.2f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("🎨", fontSize = 20.sp)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "कस्टम ऐप थीम्स (Color Themes) 🎨",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SnehaTextPrimary
+                            )
+                            Text(
+                                text = "सक्रिय: ${activeTheme.displayName} ${activeTheme.emoji}",
+                                fontSize = 12.sp,
+                                color = SnehaPurple,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "स्नेहा का रूप और रंग बदलें। अपनी पसंद की थीम पर टैप करें:",
+                        fontSize = 11.sp,
+                        color = SnehaTextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        com.example.ui.theme.SnehaAppTheme.entries.forEach { theme ->
+                            val isSelected = activeTheme == theme
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    activeTheme = theme
+                                    com.example.ui.theme.SnehaAppTheme.saveTheme(context, theme)
+                                    Toast.makeText(context, "${theme.displayName} थीम लागू की गई", Toast.LENGTH_SHORT).show()
+                                },
+                                label = {
+                                    Text(
+                                        text = "${theme.emoji} ${theme.displayName}",
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = SnehaPurple.copy(alpha = 0.25f),
+                                    selectedLabelColor = SnehaPurple,
+                                    containerColor = SnehaDarkSurfaceVariant,
+                                    labelColor = SnehaTextSecondary
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = isSelected,
+                                    borderColor = SnehaDarkSurfaceVariant,
+                                    selectedBorderColor = SnehaPurple
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3d. Floating Voice Bubble Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("card_floating_bubble"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = SnehaDarkSurface),
+                border = BorderStroke(1.5.dp, SnehaCyan)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .background(SnehaCyan.copy(alpha = 0.2f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("🫧", fontSize = 20.sp)
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "फ्लोटिंग वॉयस बबल (Bubble) 🫧",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SnehaTextPrimary
+                                )
+                                Text(
+                                    text = if (isBubbleRunning) "सक्रिय: स्क्रीन पर तैर रहा है" else "निष्क्रिय (बंद)",
+                                    fontSize = 12.sp,
+                                    color = if (isBubbleRunning) SnehaCyan else SnehaTextSecondary
+                                )
+                            }
+                        }
+
+                        Switch(
+                            checked = isBubbleRunning,
+                            onCheckedChange = { enable ->
+                                if (enable) {
+                                    if (android.provider.Settings.canDrawOverlays(context)) {
+                                        com.example.service.SnehaFloatingBubbleService.start(context)
+                                        isBubbleRunning = true
+                                        Toast.makeText(context, "फ्लोटिंग बबल चालू हो गया!", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        try {
+                                            val intent = android.content.Intent(
+                                                android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                                android.net.Uri.parse("package:${context.packageName}")
+                                            ).apply { addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK) }
+                                            context.startActivity(intent)
+                                            Toast.makeText(context, "कृपया 'अन्य ऐप्स के ऊपर दिखाएं' अनुमति दें", Toast.LENGTH_LONG).show()
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "स्क्रीन ओवरले अनुमति की आवश्यकता है", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                } else {
+                                    com.example.service.SnehaFloatingBubbleService.stop(context)
+                                    isBubbleRunning = false
+                                    Toast.makeText(context, "फ्लोटिंग बबल बंद किया गया", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.Black,
+                                checkedTrackColor = SnehaCyan
+                            ),
+                            modifier = Modifier.testTag("switch_floating_bubble")
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "YouTube, WhatsApp या गेम खेलते समय स्क्रीन पर स्नेहा का तैरता हुआ बबल रहेगा। टैप करते ही स्नेहा बात सुनेगी।",
+                        fontSize = 11.sp,
+                        color = SnehaTextSecondary
+                    )
+                }
+            }
+        }
+
+        // 3e. Emergency SOS Location Setup Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("card_emergency_sos"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = SnehaDarkSurface),
+                border = BorderStroke(1.5.dp, SnehaPink)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(SnehaPink.copy(alpha = 0.2f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("📍", fontSize = 20.sp)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "इमरजेंसी SOS लोकेशन शेयर 🚨",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SnehaTextPrimary
+                            )
+                            Text(
+                                text = "संपर्क: $sosName ($sosPhone)",
+                                fontSize = 12.sp,
+                                color = SnehaPink
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "मुसीबत में 'स्नेहा मुझे बचाओ' या 'हेल्प मी' बोलने पर इस नंबर पर लाइव Google Maps लोकेशन SMS जाएगी:",
+                        fontSize = 11.sp,
+                        color = SnehaTextSecondary
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = sosPhone,
+                            onValueChange = { sosPhone = it },
+                            label = { Text("इमरजेंसी फोन नंबर", color = SnehaTextSecondary, fontSize = 11.sp) },
+                            placeholder = { Text("उदा. 9876543210 या 112", color = SnehaTextSecondary, fontSize = 11.sp) },
+                            singleLine = true,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("emergency_phone_input"),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = SnehaPink,
+                                unfocusedBorderColor = SnehaDarkSurfaceVariant,
+                                focusedTextColor = SnehaTextPrimary,
+                                unfocusedTextColor = SnehaTextPrimary
+                            ),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                if (sosPhone.isNotBlank()) {
+                                    com.example.engine.EmergencySosManager.saveEmergencyContact(context, sosName, sosPhone.trim())
+                                    Toast.makeText(context, "इमरजेंसी संपर्क सेव हो गया!", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = SnehaPink),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.testTag("save_emergency_sos_btn")
+                        ) {
+                            Text("सेव", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3f. Voice Notes & Quick Reminders Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("card_voice_notes"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = SnehaDarkSurface),
+                border = BorderStroke(1.5.dp, SnehaEmerald)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .background(SnehaEmerald.copy(alpha = 0.2f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("📝", fontSize = 20.sp)
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "वॉयस नोट्स & रिमाइंडर डायरी 📝",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SnehaTextPrimary
+                                )
+                                Text(
+                                    text = "कुल नोट्स: ${notesList.size}",
+                                    fontSize = 12.sp,
+                                    color = SnehaEmerald
+                                )
+                            }
+                        }
+
+                        if (notesList.isNotEmpty()) {
+                            IconButton(
+                                onClick = {
+                                    val joined = notesList.take(3).mapIndexed { idx, it -> "${idx + 1}. ${it.text}" }.joinToString(". ")
+                                    onTestCustomPhrase("मास्टर, आपकी डायरी के हाल के नोट्स हैं: $joined")
+                                },
+                                modifier = Modifier.testTag("btn_read_notes")
+                            ) {
+                                Icon(Icons.Default.VolumeUp, contentDescription = "नोट्स सुनाओ", tint = SnehaEmerald)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "बोलें: 'नोट लिखो [बात]' या 'याद रखना कि [काम]'\nस्नेहा तुरंत तारीख और समय के साथ याद रखेगी।",
+                        fontSize = 11.sp,
+                        color = SnehaTextSecondary
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = newNoteInput,
+                            onValueChange = { newNoteInput = it },
+                            placeholder = { Text("त्वरित नया नोट टाइप करें...", color = SnehaTextSecondary, fontSize = 11.sp) },
+                            singleLine = true,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("quick_note_input"),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = SnehaEmerald,
+                                unfocusedBorderColor = SnehaDarkSurfaceVariant,
+                                focusedTextColor = SnehaTextPrimary,
+                                unfocusedTextColor = SnehaTextPrimary
+                            ),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                if (newNoteInput.isNotBlank()) {
+                                    com.example.engine.VoiceNotesManager.addNote(context, newNoteInput.trim())
+                                    notesList = com.example.engine.VoiceNotesManager.getAllNotes(context)
+                                    newNoteInput = ""
+                                    Toast.makeText(context, "नोट सुरक्षित सेव हो गया!", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = SnehaEmerald),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.testTag("save_quick_note_btn")
+                        ) {
+                            Text("जोड़ें", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
+
+                    if (notesList.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        notesList.take(5).forEach { note ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .background(SnehaDarkSurfaceVariant, RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = note.text,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = SnehaTextPrimary
+                                    )
+                                    Text(
+                                        text = "${if (note.type == "REMINDER") "⏰ रिमाइंडर" else "📌 नोट"} • ${note.getFormattedDate()}",
+                                        fontSize = 10.sp,
+                                        color = SnehaTextSecondary
+                                    )
+                                }
+                                IconButton(
+                                    onClick = {
+                                        com.example.engine.VoiceNotesManager.deleteNote(context, note.id)
+                                        notesList = com.example.engine.VoiceNotesManager.getAllNotes(context)
+                                    },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Block,
+                                        contentDescription = "हटाएं",
+                                        tint = SnehaPink,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
