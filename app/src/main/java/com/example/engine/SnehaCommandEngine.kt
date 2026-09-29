@@ -34,9 +34,35 @@ object SnehaCommandEngine {
                 lower == "हेलो स्नेहा" || lower == "नमस्ते स्नेहा" || lower == "हाय स्नेहा" ||
                 lower == "हेलो" || lower == "नमस्ते" || lower == "hello" || lower == "hi"
         if (isJustCalling) {
+            val isGf = VoicePreferences.getPersona(context).id == com.example.data.model.VoicePersonaId.GIRLFRIEND
+            val greeting = if (isGf) "हाँ मेरे जानू! ❤️ मैं हाजिर हूँ, आज्ञा दीजिए! मैं आपके लिए क्या करूँ?" else "जी $userTitle! मैं हाजिर हूँ, आज्ञा दीजिए! मैं आपके लिए क्या करूँ?"
             return CommandResult(
-                spokenResponse = "जी $userTitle! मैं हाजिर हूँ, आज्ञा दीजिए! मैं आपके लिए क्या करूँ?",
-                actionTaken = SnehaAction.ConversationalAnswer("जी $userTitle! मैं हाजिर हूँ, आज्ञा दीजिए!")
+                spokenResponse = greeting,
+                actionTaken = SnehaAction.ConversationalAnswer(greeting)
+            )
+        }
+
+        // 0. Night Sleep Routine ("Good Night", "शुभ रात्रि", "सोने जा रहा हूँ", "सो जाओ")
+        val isGoodNight = lower.contains("good night") || lower.contains("गुड नाईट") || lower.contains("गुडनाइट") ||
+                lower.contains("शुभ रात्रि") || lower.contains("सोने जा रहा हूँ") || lower.contains("सोने जा रहा हु") ||
+                lower.contains("सो जाओ") || lower == "गुड नाईट" || lower == "शुभ रात्रि" || lower == "good night"
+        if (isGoodNight) {
+            val reply = NightRoutineManager.handleGoodNight(context)
+            return CommandResult(
+                spokenResponse = reply,
+                actionTaken = SnehaAction.ConversationalAnswer(reply)
+            )
+        }
+
+        // 0. Morning Wakeup Routine ("Good Morning", "सुप्रभात", "उठ गया", "सुबह हो गई")
+        val isGoodMorning = lower.contains("good morning") || lower.contains("गुड मॉर्निंग") || lower.contains("सुप्रभात") ||
+                lower.contains("उठ गया") || lower.contains("जाग गया") || lower.contains("सुबह हो गई") ||
+                lower == "गुड मॉर्निंग" || lower == "सुप्रभात" || lower == "good morning"
+        if (isGoodMorning) {
+            val reply = NightRoutineManager.handleGoodMorning(context)
+            return CommandResult(
+                spokenResponse = reply,
+                actionTaken = SnehaAction.ConversationalAnswer(reply)
             )
         }
 
@@ -45,6 +71,42 @@ object SnehaCommandEngine {
             return CommandResult(
                 spokenResponse = langSpeech,
                 actionTaken = SnehaAction.ConversationalAnswer(langSpeech)
+            )
+        }
+
+        // 0aa. Universal Reel / Shorts Voice Scroll ("रील स्क्रॉल करो", "अगली रील", "नेक्स्ट रील", "पिछली रील", "रील ऊपर करो")
+        val isReelScrollNext = lower.contains("रील स्क्रॉल") || lower.contains("रील स्कॉल") || lower.contains("scroll reel") ||
+                lower.contains("अगली रील") || lower.contains("next reel") || lower.contains("रील ऊपर") ||
+                lower == "नेक्स्ट रील" || lower == "अगली रील" || lower == "next reel" || lower == "रील स्क्रॉल" ||
+                lower == "scroll next" || lower == "अगला वीडियो" || lower == "नेक्स्ट वीडियो" || lower == "scroll down"
+
+        if (isReelScrollNext) {
+            val (success, reply) = com.example.service.SnehaAccessibilityService.scrollNextReel(context)
+            return CommandResult(
+                spokenResponse = reply,
+                actionTaken = SnehaAction.ConversationalAnswer(reply)
+            )
+        }
+
+        val isReelScrollPrev = lower.contains("पिछली रील") || lower.contains("previous reel") || lower.contains("रील नीचे") ||
+                lower == "पिछली रील" || lower == "previous reel" || lower == "रील बैक" || lower == "बैक रील" ||
+                lower == "पिछला वीडियो" || lower == "scroll up"
+
+        if (isReelScrollPrev) {
+            val (success, reply) = com.example.service.SnehaAccessibilityService.scrollPreviousReel(context)
+            return CommandResult(
+                spokenResponse = reply,
+                actionTaken = SnehaAction.ConversationalAnswer(reply)
+            )
+        }
+
+        // Auto Reel Scroll ("ऑटो रील स्क्रॉल चालू करो", "ऑटो स्क्रॉल बंद करो")
+        if (lower.contains("ऑटो") && (lower.contains("स्क्रॉल") || lower.contains("रील"))) {
+            val isStop = lower.contains("बंद") || lower.contains("stop") || lower.contains("रोक")
+            val (success, reply) = com.example.service.SnehaAccessibilityService.toggleAutoScroll(context, enable = !isStop)
+            return CommandResult(
+                spokenResponse = reply,
+                actionTaken = SnehaAction.ConversationalAnswer(reply)
             )
         }
 
@@ -384,15 +446,21 @@ object SnehaCommandEngine {
             }
         }
 
-        // 4. Phone Unlock Request ("फोन अनलॉक करो", "unlock phone", "स्क्रीन खोलो", "अनलॉक करो")
+        // 4. Phone Unlock Request ("फोन अनलॉक करो", "unlock phone", "स्क्रीन खोलो", "अनलॉक करो", "लॉक खोलो")
         if (lower.contains("फोन अनलॉक") || lower.contains("phone unlock") || lower.contains("स्क्रीन अनलॉक") ||
-            lower.contains("डिवाइस अनलॉक") || lower == "अनलॉक करो" || lower == "unlock" || lower == "unlock phone"
+            lower.contains("डिवाइस अनलॉक") || lower == "अनलॉक करो" || lower == "unlock" || lower == "unlock phone" ||
+            lower.contains("लॉक खोलो") || lower.contains("स्क्रीन खोलो") || lower.contains("फोन खोलो")
         ) {
+            LockScreenHelper.wakeUpScreen(context)
             if (activity != null) {
-                PhoneControlManager.requestEmergencyUnlock(activity) {}
+                LockScreenHelper.requestEmergencyKeyguardDismiss(activity) { success ->
+                    android.util.Log.d("Unlock", "Keyguard dismiss result: $success")
+                }
+            } else {
+                LockScreenHelper.launchOverLockScreen(context, startVoiceMic = false)
             }
             return CommandResult(
-                spokenResponse = "जी मास्टर, मैं फोन अनलॉक कर रही हूँ। कृपया अपना पिन, पैटर्न या पासवर्ड दर्ज करें या बोलें।",
+                spokenResponse = "जी $userTitle, मैं स्क्रीन अनलॉक कर रही हूँ।",
                 actionTaken = SnehaAction.OpenSecurityUnlock
             )
         }
@@ -669,12 +737,14 @@ object SnehaCommandEngine {
             )
         }
 
-        // 15. General Conversational / AI Query with Gemini API (Always addressing as user's chosen title)
+        // 15. General Conversational / AI Query with Gemini API (Always addressing obediently)
+        val isGf = VoicePreferences.getPersona(context).id == com.example.data.model.VoicePersonaId.GIRLFRIEND
+        val targetSalutation = if (isGf) "मेरे जानू" else userTitle
         val aiResponse = GeminiApiClient.getSnehaAiResponse(input)
-        val formattedResponse = if (!aiResponse.contains(userTitle, ignoreCase = true) && !aiResponse.contains("मास्टर")) {
-            "$userTitle, $aiResponse"
+        val formattedResponse = if (!aiResponse.contains(targetSalutation, ignoreCase = true) && !aiResponse.contains("मास्टर")) {
+            "$targetSalutation, $aiResponse"
         } else {
-            aiResponse.replace("मास्टर", userTitle)
+            aiResponse.replace("मास्टर", targetSalutation)
         }
 
         return CommandResult(

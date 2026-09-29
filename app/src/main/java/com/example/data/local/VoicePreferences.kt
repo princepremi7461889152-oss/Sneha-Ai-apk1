@@ -22,6 +22,8 @@ object VoicePreferences {
     private const val KEY_CLASS_TIMETABLE_MODE = "class_timetable_mode_enabled"
     private const val KEY_TRANSLATOR_SOURCE_LANG = "translator_source_lang"
     private const val KEY_TRANSLATOR_TARGET_LANG = "translator_target_lang"
+    private const val KEY_NIGHT_SLEEP_MODE = "night_sleep_mode_enabled"
+    private const val KEY_PRE_SLEEP_RINGER_VOLUME = "pre_sleep_ringer_volume"
 
     private fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
@@ -94,6 +96,22 @@ object VoicePreferences {
 
     fun saveTranslatorTargetLang(context: Context, lang: String) {
         getPrefs(context).edit().putString(KEY_TRANSLATOR_TARGET_LANG, lang).apply()
+    }
+
+    fun isNightSleepMode(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_NIGHT_SLEEP_MODE, false)
+    }
+
+    fun saveNightSleepMode(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_NIGHT_SLEEP_MODE, enabled).apply()
+    }
+
+    fun getPreSleepRingerVolume(context: Context): Int {
+        return getPrefs(context).getInt(KEY_PRE_SLEEP_RINGER_VOLUME, -1)
+    }
+
+    fun savePreSleepRingerVolume(context: Context, volume: Int) {
+        getPrefs(context).edit().putInt(KEY_PRE_SLEEP_RINGER_VOLUME, volume).apply()
     }
 
     fun getPersona(context: Context): VoicePersona {

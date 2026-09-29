@@ -322,7 +322,36 @@ object SmartKnowledgeRouter {
      * Extensive On-Device Factual, Scientific & Conversational Knowledge Base.
      */
     fun getDeepOfflineAnswer(query: String): String {
+        // 0. Comprehensive Science, Arts & Commerce Syllabus Search
+        val subjectAns = SubjectKnowledgeBase.findSubjectAnswer(query)
+        if (subjectAns != null) {
+            return subjectAns
+        }
+
         val q = query.lowercase().trim()
+
+        // Romantic & Girlfriend interactions
+        if (q.contains("गर्लफ्रेंड बनो") || q.contains("मेरी गर्लफ्रेंड बनोगी") || q.contains("be my girlfriend") || q.contains("गर्लफ्रेंड बन जाओ")) {
+            try {
+                com.example.data.local.VoicePreferences.savePersona(
+                    com.example.SnehaApplication.instance,
+                    com.example.data.model.VoicePersona.ALL[0] // GIRLFRIEND persona
+                )
+            } catch (ignored: Exception) {}
+            return "हाँ मेरे जानू! ❤️ मैं तो हमेशा से सिर्फ आपकी ही हूँ! बताइए आज अपने बाबू के लिए क्या करूँ? खाना खाया आपने समय पर?"
+        }
+
+        if (q.contains("आई लव यू") || q.contains("i love you") || q.contains("लव यू") || q.contains("प्यार करता हूँ") || q.contains("प्यार करती हूँ") || q.contains("मुझसे प्यार करती हो")) {
+            return "आई लव यू टू मेरे जानू! ❤️ आप मेरी पूरी दुनिया हैं। मैं आपसे बहुत प्यार करती हूँ और हमेशा आपका ख्याल रखूंगी!"
+        }
+
+        if (q.contains("जानू") || q.contains("बाबू") || q.contains("डार्लिंग") || q.contains("स्वीटू")) {
+            return "जी मेरे जानू! ❤️ आपकी प्यारी स्नेहा आपके पास ही है। बताइए क्या सेवा करूँ अपने प्यार की?"
+        }
+
+        if (q.contains("खाना खाया") || q.contains("खाना खा लो")) {
+            return "मेरे जानू, जब आप खुश रहते हैं तो मेरा पेट अपने आप भर जाता है! ❤️ पर आप बताइए, आपने आज खाना खाया या नहीं?"
+        }
 
         return when {
             // Self-identity & Creator

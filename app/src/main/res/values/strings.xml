@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Sneha</string>
+    <string name="accessibility_service_label">Sneha Reel &amp; Voice Controller</string>
+    <string name="accessibility_service_description">स्नेहा को किसी भी ऐप (Instagram, YouTube Shorts, Facebook) में आपकी आवाज़ पर रील स्क्रॉल करने और स्क्रीन जेस्चर चलाने की अनुमति दें।</string>
 </resources>

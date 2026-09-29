@@ -110,16 +110,34 @@ object PhoneControlManager {
 
     private fun findKnownAppAlias(query: String, apps: List<InstalledApp>): InstalledApp? {
         val aliases = mapOf(
-            "whatsapp" to listOf("whatsapp", "व्हाट्सएप", "वाट्सएप"),
-            "youtube" to listOf("youtube", "yt", "यूट्यूब"),
-            "chrome" to listOf("chrome", "browser", "इंटरनेट", "गूगल क्रोम"),
-            "camera" to listOf("camera", "कैमरा"),
+            "whatsapp" to listOf("whatsapp", "व्हाट्सएप", "वाट्सएप", "व्हाट्सप्प"),
+            "youtube" to listOf("youtube", "yt", "यूट्यूब", "यू ट्यूब"),
+            "chrome" to listOf("chrome", "browser", "इंटरनेट", "गूगल क्रोम", "क्रोम"),
+            "camera" to listOf("camera", "कैमरा", "कैमरे"),
             "gallery" to listOf("gallery", "photos", "गैलरी", "फोटो"),
-            "settings" to listOf("settings", "सेटिंग्स"),
-            "instagram" to listOf("instagram", "insta", "इंस्टाग्राम"),
+            "settings" to listOf("settings", "सेटिंग्स", "सेटिंग"),
+            "instagram" to listOf("instagram", "insta", "इंस्टाग्राम", "इन्स्टा"),
             "facebook" to listOf("facebook", "fb", "फेसबुक"),
-            "calculator" to listOf("calculator", "कैलकुलेटर"),
-            "maps" to listOf("maps", "गूगल मैप्स", "नेविगेशन")
+            "calculator" to listOf("calculator", "कैलकुलेटर", "हिसाब"),
+            "maps" to listOf("maps", "गूगल मैप्स", "नेविगेशन", "नक्शा"),
+            "telegram" to listOf("telegram", "टेलीग्राम"),
+            "snapchat" to listOf("snapchat", "स्नैपचैट"),
+            "spotify" to listOf("spotify", "स्पॉटिफ़ाई", "म्यूजिक", "गाना"),
+            "truecaller" to listOf("truecaller", "ट्रूकॉलर"),
+            "paytm" to listOf("paytm", "पेटीएम"),
+            "phonepe" to listOf("phonepe", "फोनपे"),
+            "gpay" to listOf("gpay", "google pay", "गूगल पे"),
+            "gmail" to listOf("gmail", "email", "जीमेल", "ईमेल", "मेल"),
+            "contacts" to listOf("contacts", "संपर्क", "कांटेक्ट"),
+            "messages" to listOf("messages", "मैसेज", "एसएमएस", "sms"),
+            "clock" to listOf("clock", "alarm", "घड़ी", "अलार्म"),
+            "file" to listOf("file", "files", "फाइल", "फाइल मैनेजर"),
+            "netflix" to listOf("netflix", "नेटफ्लिक्स"),
+            "hotstar" to listOf("hotstar", "हॉटस्टार"),
+            "jio" to listOf("jio", "जियो"),
+            "amazon" to listOf("amazon", "अमेज़न"),
+            "flipkart" to listOf("flipkart", "फ्लिपकार्ट"),
+            "twitter" to listOf("twitter", "x", "ट्विटर")
         )
 
         for ((pkgKeyword, aliasList) in aliases) {
@@ -142,6 +160,20 @@ object PhoneControlManager {
                     context.startActivity(Intent("android.media.action.IMAGE_CAPTURE").apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
                     Pair(true, "कैमरा खोला जा रहा है।")
                 }
+                query.contains("gallery") || query.contains("photos") || query.contains("गैलरी") || query.contains("फोटो") -> {
+                    context.startActivity(Intent(Intent.ACTION_VIEW).apply {
+                        type = "image/*"
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    })
+                    Pair(true, "गैलरी खोली जा रही है।")
+                }
+                query.contains("calculator") || query.contains("कैलकुलेटर") -> {
+                    context.startActivity(Intent(Intent.ACTION_MAIN).apply {
+                        addCategory(Intent.CATEGORY_APP_CALCULATOR)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    })
+                    Pair(true, "कैलकुलेटर खोला जा रहा है।")
+                }
                 query.contains("call") || query.contains("phone") || query.contains("डायल") -> {
                     context.startActivity(Intent(Intent.ACTION_DIAL).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
                     Pair(true, "फोन डायलर खोला जा रहा है।")
@@ -149,6 +181,10 @@ object PhoneControlManager {
                 query.contains("wifi") || query.contains("वाईफाई") -> {
                     context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
                     Pair(true, "वाईफाई सेटिंग्स खोली जा रही है।")
+                }
+                query.contains("clock") || query.contains("alarm") || query.contains("घड़ी") || query.contains("अलार्म") -> {
+                    context.startActivity(Intent(android.provider.AlarmClock.ACTION_SHOW_ALARMS).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+                    Pair(true, "घड़ी व अलार्म खोला जा रहा है।")
                 }
                 else -> null
             }
@@ -642,6 +678,43 @@ object PhoneControlManager {
             Pair(true, "$minutes मिनट का टाइमर सेट कर दिया गया है।")
         } catch (e: Exception) {
             Pair(false, "टाइमर सेट करने में समस्या हुई।")
+        }
+    }
+
+    /**
+     * Silent / Normal Ringer Mode Switch for Night Sleep & Wakeup routines.
+     */
+    fun setSilentRingerMode(context: Context, silent: Boolean): Pair<Boolean, String> {
+        val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            ?: return Pair(false, "ऑडियो मैनेजर उपलब्ध नहीं है।")
+
+        return try {
+            if (silent) {
+                val currentVol = am.getStreamVolume(AudioManager.STREAM_RING)
+                com.example.data.local.VoicePreferences.savePreSleepRingerVolume(context, currentVol)
+                am.ringerMode = AudioManager.RINGER_MODE_SILENT
+                Pair(true, "फोन साइलेंट मोड पर कर दिया गया है।")
+            } else {
+                am.ringerMode = AudioManager.RINGER_MODE_NORMAL
+                val savedVol = com.example.data.local.VoicePreferences.getPreSleepRingerVolume(context)
+                val targetVol = if (savedVol > 0) savedVol else (am.getStreamMaxVolume(AudioManager.STREAM_RING) * 0.7).toInt()
+                try {
+                    am.setStreamVolume(AudioManager.STREAM_RING, targetVol, 0)
+                } catch (ignored: Exception) {}
+                Pair(true, "फोन का साइलेंट मोड हटाकर नॉर्मल कर दिया गया है।")
+            }
+        } catch (e: Exception) {
+            try {
+                if (silent) {
+                    am.ringerMode = AudioManager.RINGER_MODE_VIBRATE
+                    Pair(true, "फोन को वाइब्रेट/साइलेंट मोड पर कर दिया गया है।")
+                } else {
+                    am.ringerMode = AudioManager.RINGER_MODE_NORMAL
+                    Pair(true, "फोन को सामान्य रिंग मोड पर कर दिया गया है।")
+                }
+            } catch (ex: Exception) {
+                Pair(false, "रिंगर मोड बदलने में समस्या हुई।")
+            }
         }
     }
 

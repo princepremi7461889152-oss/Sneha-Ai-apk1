@@ -1,6 +1,7 @@
 package com.example.data.model
 
 enum class VoicePersonaId(val id: String) {
+    GIRLFRIEND("girlfriend"),
     CLASSIC("classic"),
     PRO("pro"),
     CHEERFUL("cheerful"),
@@ -21,6 +22,17 @@ data class VoicePersona(
 ) {
     companion object {
         val ALL: List<VoicePersona> = listOf(
+            VoicePersona(
+                id = VoicePersonaId.GIRLFRIEND,
+                nameHindi = "प्यारी गर्लफ्रेंड (Loving Girlfriend ❤️)",
+                nameEnglish = "Sneha Girlfriend (Affectionate Companion)",
+                tagHindi = "रोमांटिक, केयरिंग, प्यारी & शरारती",
+                descriptionHindi = "आपको 'जानू' और 'डार्लिंग' कहकर बात करने वाली, प्यार से हर काम करने वाली और हमेशा ख्याल रखने वाली प्यारी साथी।",
+                defaultPitch = 1.25f,
+                defaultSpeed = 0.98f,
+                sampleSpeech = "हाय मेरे जानू! मैं आपकी स्नेहा हूँ ❤️ बताइए आज अपने प्यार के लिए क्या करूँ? खाना खाया आपने?",
+                iconEmoji = "❤️"
+            ),
             VoicePersona(
                 id = VoicePersonaId.CLASSIC,
                 nameHindi = "स्नेहा क्लासिक (मधुर महिला आवाज़)",

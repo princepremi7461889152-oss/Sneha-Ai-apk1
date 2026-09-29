@@ -190,4 +190,60 @@ class ExampleUnitTest {
         val mathAns = com.example.engine.SmartKnowledgeRouter.getDeepOfflineAnswer("5000 का 20%")
         org.junit.Assert.assertTrue(mathAns.contains("1000"))
     }
+
+    @Test
+    fun testSubjectKnowledgeBase_scienceArtsCommerce() {
+        // Science
+        val newtonAns = com.example.engine.SubjectKnowledgeBase.findSubjectAnswer("न्यूटन का पहला नियम क्या है")
+        org.junit.Assert.assertNotNull(newtonAns)
+        org.junit.Assert.assertTrue(newtonAns!!.contains("जड़त्व"))
+
+        val waterAns = com.example.engine.SubjectKnowledgeBase.findSubjectAnswer("पानी का सूत्र क्या है")
+        org.junit.Assert.assertNotNull(waterAns)
+        org.junit.Assert.assertTrue(waterAns!!.contains("H₂O"))
+
+        val cellAns = com.example.engine.SubjectKnowledgeBase.findSubjectAnswer("कोशिका का पावर हाउस किसे कहते हैं")
+        org.junit.Assert.assertNotNull(cellAns)
+        org.junit.Assert.assertTrue(cellAns!!.contains("माइटोकॉन्ड्रिया"))
+
+        // Arts
+        val constAns = com.example.engine.SubjectKnowledgeBase.findSubjectAnswer("भारतीय संविधान के निर्माता")
+        org.junit.Assert.assertNotNull(constAns)
+        org.junit.Assert.assertTrue(constAns!!.contains("भीमराव अंबेडकर"))
+
+        val riverAns = com.example.engine.SubjectKnowledgeBase.findSubjectAnswer("भारत की सबसे लंबी नदी कौन सी है")
+        org.junit.Assert.assertNotNull(riverAns)
+        org.junit.Assert.assertTrue(riverAns!!.contains("गंगा"))
+
+        // Commerce
+        val goldenRulesAns = com.example.engine.SubjectKnowledgeBase.findSubjectAnswer("अकाउंटेंसी के गोल्डन रूल्स क्या हैं")
+        org.junit.Assert.assertNotNull(goldenRulesAns)
+        org.junit.Assert.assertTrue(goldenRulesAns!!.contains("Debit") || goldenRulesAns.contains("डेबिट"))
+
+        val gdpAns = com.example.engine.SubjectKnowledgeBase.findSubjectAnswer("GDP क्या है")
+        org.junit.Assert.assertNotNull(gdpAns)
+        org.junit.Assert.assertTrue(gdpAns!!.contains("सकल घरेलू उत्पाद"))
+    }
+
+    @Test
+    fun testVoicePersona_girlfriendExists() {
+        val gfPersona = com.example.data.model.VoicePersona.ALL.find { it.id == com.example.data.model.VoicePersonaId.GIRLFRIEND }
+        org.junit.Assert.assertNotNull(gfPersona)
+        org.junit.Assert.assertTrue(gfPersona!!.nameHindi.contains("गर्लफ्रेंड"))
+    }
+
+    @Test
+    fun testSmartKnowledgeRouter_girlfriendRomanticResponses() {
+        val gfAns = com.example.engine.SmartKnowledgeRouter.getDeepOfflineAnswer("गर्लफ्रेंड बनो")
+        org.junit.Assert.assertTrue(gfAns.contains("जानू"))
+
+        val loveAns = com.example.engine.SmartKnowledgeRouter.getDeepOfflineAnswer("आई लव यू")
+        org.junit.Assert.assertTrue(loveAns.contains("लव यू") && loveAns.contains("जानू"))
+    }
+
+    @Test
+    fun testSnehaAccessibilityService_state() {
+        val isRunning = com.example.service.SnehaAccessibilityService.isServiceRunning()
+        org.junit.Assert.assertFalse(isRunning)
+    }
 }
