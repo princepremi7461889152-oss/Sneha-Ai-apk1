@@ -52,6 +52,16 @@ class MainActivity : ComponentActivity() {
 
         voiceSpeechManager = VoiceSpeechManager(this)
 
+        // Connect Earphone Button Listener
+        com.example.engine.EarphoneControlManager.onEarphoneButtonPressed = {
+            runOnUiThread {
+                voiceSpeechManager.speak("जी मास्टर! मैं इयरफ़ोन से सुन रही हूँ, बोलिए!")
+                window.decorView.postDelayed({
+                    voiceSpeechManager.startListening(playChime = true)
+                }, 1300)
+            }
+        }
+
         // Safe background voice service start (only if permission already granted)
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
             try {

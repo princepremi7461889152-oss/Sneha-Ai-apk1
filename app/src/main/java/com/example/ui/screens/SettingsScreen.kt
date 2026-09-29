@@ -2521,6 +2521,22 @@ private fun AllFeaturesDirectoryTab(
             targetScreen = SnehaScreen.SCREEN_SHARE
         ),
         FeatureDirectoryItem(
+            title = "🏠 IoT स्मार्ट होम हब व उपकरण",
+            description = "कमरे की लाइट्स, पंखे, इन्वर्टर एसी, स्मार्ट टीवी व गीजर का वॉयस व टच कंट्रोल।",
+            icon = Icons.Default.Bolt,
+            iconColor = SnehaCyan,
+            statusText = "IoT हब सक्रिय",
+            targetScreen = SnehaScreen.SMART_HOME
+        ),
+        FeatureDirectoryItem(
+            title = "🎨 Gemini AI क्रिएटिव स्टूडियो",
+            description = "AI इमेज जनरेशन (Imagen 3), AI म्यूज़िक कंपोज़र, Veo वीडियो व लाइव डेटा सर्च।",
+            icon = Icons.Default.AutoAwesome,
+            iconColor = SnehaPink,
+            statusText = "Gemini 2.5 तैयार",
+            targetScreen = SnehaScreen.CREATIVE_STUDIO
+        ),
+        FeatureDirectoryItem(
             title = "⚙️ फोन हार्डवेयर व सिस्टम कंट्रोल",
             description = "टॉर्च, सायरन, बैटरी स्थिति, वॉल्यूम, वाई-फाई, ब्लूटूथ व ऐप ओपन कमांड्स।",
             icon = Icons.Default.Settings,

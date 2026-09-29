@@ -24,6 +24,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
@@ -32,6 +34,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Headset
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
@@ -41,6 +44,8 @@ import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.ScreenShare
 import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.ui.text.input.ImeAction
+import com.example.engine.EarphoneControlManager
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -117,6 +122,9 @@ fun AssistantScreen(
     var textInput by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
+    val isEarphoneConnected by EarphoneControlManager.isEarphoneConnected.collectAsState()
+    val earphoneStatus by EarphoneControlManager.earphoneStatusText.collectAsState()
+
     val currentWakeWord = com.example.data.local.VoicePreferences.getCustomWakeWord(context)
     val currentUserName = com.example.data.local.VoicePreferences.getUserName(context)
     val isCallRinging by CallAssistantManager.isCallRinging.collectAsState()
@@ -179,6 +187,34 @@ fun AssistantScreen(
                                 color = SnehaCyan,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
+                        }
+
+                        if (isEarphoneConnected) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = SnehaPurple.copy(alpha = 0.25f),
+                                border = BorderStroke(0.8.dp, SnehaPurple)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Headset,
+                                        contentDescription = null,
+                                        tint = SnehaCyan,
+                                        modifier = Modifier.size(11.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = earphoneStatus,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = SnehaCyan
+                                    )
+                                }
+                            }
                         }
                     }
                     Text(
@@ -376,37 +412,86 @@ fun AssistantScreen(
             color = SnehaDarkSurface,
             shadowElevation = 8.dp
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = textInput,
-                    onValueChange = { textInput = it },
-                    placeholder = {
-                        Text(
-                            "$currentUserName, स्नेहा से कुछ भी कहें या आदेश दें...",
-                            fontSize = 13.sp,
-                            color = SnehaTextSecondary
-                        )
-                    },
+            Column(modifier = Modifier.fillMaxWidth()) {
+                // Quick Command Chips Strip
+                val quickChips = listOf(
+                    "🔦 टॉर्च जलाओ",
+                    "⏰ समय क्या है",
+                    "🔋 बैटरी कितनी है",
+                    "💡 लाइट जलाओ",
+                    "🌀 पंखा 4 पर करो",
+                    "📞 कॉल लगाओ",
+                    "📝 नया नोट लिखो",
+                    "🚨 इमरजेंसी SOS",
+                    "🌾 भोजपुरी बोलो",
+                    "🧮 2500 का 18%"
+                )
+                LazyRow(
                     modifier = Modifier
-                        .weight(1f)
-                        .testTag("chat_text_input"),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = SnehaDarkSurfaceVariant,
-                        unfocusedContainerColor = SnehaDarkSurfaceVariant,
-                        focusedBorderColor = SnehaCyan,
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedTextColor = SnehaTextPrimary,
-                        unfocusedTextColor = SnehaTextPrimary
-                    ),
-                    maxLines = 3,
-                    trailingIcon = {
-                        if (textInput.isNotBlank()) {
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(quickChips) { chip ->
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = SnehaDarkSurfaceVariant,
+                            border = BorderStroke(1.dp, SnehaCyan.copy(alpha = 0.35f)),
+                            modifier = Modifier.clickable {
+                                onSendMessage(chip)
+                            }
+                        ) {
+                            Text(
+                                text = chip,
+                                fontSize = 11.sp,
+                                color = SnehaCyan,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            )
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = textInput,
+                        onValueChange = { textInput = it },
+                        placeholder = {
+                            Text(
+                                "$currentUserName, यहाँ लिखकर या बोलकर आदेश दें...",
+                                fontSize = 13.sp,
+                                color = SnehaTextSecondary
+                            )
+                        },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(
+                            onSend = {
+                                val q = textInput.trim()
+                                if (q.isNotBlank()) {
+                                    onSendMessage(q)
+                                    textInput = ""
+                                }
+                            }
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("chat_text_input"),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = SnehaDarkSurfaceVariant,
+                            unfocusedContainerColor = SnehaDarkSurfaceVariant,
+                            focusedBorderColor = SnehaCyan,
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedTextColor = SnehaTextPrimary,
+                            unfocusedTextColor = SnehaTextPrimary
+                        ),
+                        maxLines = 3,
+                        trailingIcon = {
                             IconButton(
                                 onClick = {
                                     val q = textInput.trim()
@@ -415,24 +500,25 @@ fun AssistantScreen(
                                         textInput = ""
                                     }
                                 },
+                                enabled = textInput.isNotBlank(),
                                 modifier = Modifier.testTag("send_message_button")
                             ) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.Send,
                                     contentDescription = "भेजें",
-                                    tint = SnehaCyan
+                                    tint = if (textInput.isNotBlank()) SnehaCyan else SnehaTextSecondary.copy(alpha = 0.3f)
                                 )
                             }
                         }
-                    }
-                )
+                    )
 
-                Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
 
-                MicButton(
-                    voiceState = voiceState,
-                    onClick = onMicClick
-                )
+                    MicButton(
+                        voiceState = voiceState,
+                        onClick = onMicClick
+                    )
+                }
             }
         }
     }

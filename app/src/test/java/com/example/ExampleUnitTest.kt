@@ -167,4 +167,27 @@ class ExampleUnitTest {
         org.junit.Assert.assertTrue(devices.any { it.type == com.example.engine.DeviceType.AC })
         org.junit.Assert.assertTrue(devices.any { it.type == com.example.engine.DeviceType.TV })
     }
+
+    @Test
+    fun testEarphoneControlManager_initialState() {
+        val connected = com.example.engine.EarphoneControlManager.isEarphoneConnected.value
+        val statusText = com.example.engine.EarphoneControlManager.earphoneStatusText.value
+        org.junit.Assert.assertNotNull(statusText)
+        org.junit.Assert.assertFalse(connected)
+    }
+
+    @Test
+    fun testSmartKnowledgeRouter_deepOfflineAnswer() {
+        val capitalAns = com.example.engine.SmartKnowledgeRouter.getDeepOfflineAnswer("भारत की राजधानी क्या है")
+        org.junit.Assert.assertTrue(capitalAns.contains("नई दिल्ली"))
+
+        val pmAns = com.example.engine.SmartKnowledgeRouter.getDeepOfflineAnswer("भारत के प्रधानमंत्री कौन हैं")
+        org.junit.Assert.assertTrue(pmAns.contains("नरेंद्र मोदी"))
+
+        val sunAns = com.example.engine.SmartKnowledgeRouter.getDeepOfflineAnswer("सूर्य से पृथ्वी की दूरी")
+        org.junit.Assert.assertTrue(sunAns.contains("किलोमीटर"))
+
+        val mathAns = com.example.engine.SmartKnowledgeRouter.getDeepOfflineAnswer("5000 का 20%")
+        org.junit.Assert.assertTrue(mathAns.contains("1000"))
+    }
 }

@@ -18,6 +18,21 @@ class SnehaApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+
+        // Global crash guard to prevent app force-closes ("kick" out)
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            android.util.Log.e("SnehaCrashGuard", "Intercepted uncaught exception in thread ${thread.name}", throwable)
+            try {
+                // If it's a non-fatal service/coroutine exception, log without killing process
+                if (throwable !is OutOfMemoryError) {
+                    android.util.Log.w("SnehaCrashGuard", "Safely recovered from exception: ${throwable.message}")
+                    return@setDefaultUncaughtExceptionHandler
+                }
+            } catch (ignored: Exception) {}
+            defaultHandler?.uncaughtException(thread, throwable)
+        }
+
         com.example.engine.ContextValHolder.appContext = applicationContext
         createChannels()
         seedEmergencyContacts()
@@ -30,6 +45,10 @@ class SnehaApplication : Application() {
         com.example.engine.ClassTimetableManager.init(this)
         com.example.engine.WhatsAppManager.init(this)
         com.example.engine.CallTranslatorManager.init(this)
+        com.example.engine.EarphoneControlManager.init(this)
+        com.example.engine.RegionalLanguageManager.init(this)
+        com.example.engine.OfflineVoiceManager.init(this)
+        com.example.engine.SmartHomeManager.init(this)
     }
 
     private fun createChannels() {

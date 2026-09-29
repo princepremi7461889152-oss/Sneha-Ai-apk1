@@ -145,6 +145,18 @@ class SnehaVoiceService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Unconditionally attach foreground notification immediately to satisfy Android OS requirements
+        try {
+            val notification = buildForegroundNotification()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (e: Exception) {
+            Log.e("SnehaVoiceService", "startForeground error", e)
+        }
+
         val action = intent?.action
         if (action == ACTION_STOP_SERVICE) {
             stopWakeWordListening()
@@ -159,20 +171,9 @@ class SnehaVoiceService : Service() {
 
         if (!hasMicPermission) {
             Log.w("SnehaVoiceService", "RECORD_AUDIO not granted, stopping service gracefully")
+            stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
-        }
-
-        // Unconditionally attach foreground notification immediately to satisfy Android OS requirements
-        try {
-            val notification = buildForegroundNotification()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
-            } else {
-                startForeground(NOTIFICATION_ID, notification)
-            }
-        } catch (e: Exception) {
-            Log.e("SnehaVoiceService", "startForeground error", e)
         }
 
         when (action) {
