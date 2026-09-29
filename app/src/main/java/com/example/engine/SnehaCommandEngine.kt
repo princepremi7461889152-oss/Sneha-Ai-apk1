@@ -40,6 +40,52 @@ object SnehaCommandEngine {
             )
         }
 
+        // 0a. Regional Language / Dialect Switch ("भोजपुरी में बोलो", "मैथिली में बात करो", "पंजाबी बोलो", "english me bolo")
+        RegionalLanguageManager.checkVoiceLanguageSwitch(context, input)?.let { (_, langSpeech) ->
+            return CommandResult(
+                spokenResponse = langSpeech,
+                actionTaken = SnehaAction.ConversationalAnswer(langSpeech)
+            )
+        }
+
+        // 0b. Open Smart Home Hub or IoT Controls ("स्मार्ट होम खोलो", "लाइट जलाओ", "पंखा 4 पर करो", "एसी 24 डिग्री")
+        if (lower.contains("स्मार्ट होम खोलो") || lower.contains("smart home") || lower == "स्मार्ट होम") {
+            return CommandResult(
+                spokenResponse = "मास्टर, IoT स्मार्ट होम हब खोला जा रहा है।",
+                actionTaken = SnehaAction.OpenSmartHome
+            )
+        }
+        SmartHomeManager.processSmartHomeVoiceCommand(context, input)?.let { (handled, iotSpeech) ->
+            if (handled) {
+                return CommandResult(
+                    spokenResponse = iotSpeech,
+                    actionTaken = SnehaAction.ConversationalAnswer(iotSpeech)
+                )
+            }
+        }
+
+        // 0c. Offline Mode Force Toggle ("ऑफलाइन मोड ऑन करो", "ऑफलाइन मोड बंद करो")
+        if (lower.contains("ऑफलाइन मोड") || lower.contains("offline mode")) {
+            val isOff = lower.contains("बंद") || lower.contains("off") || lower.contains("हटाओ")
+            OfflineVoiceManager.setForceOffline(context, !isOff)
+            val reply = if (isOff) {
+                "मास्टर, ऑफलाइन मोड बंद कर दिया गया है। स्नेहा अब ऑनलाइन इंटरनेट और Gemini AI से कनेक्टेड है।"
+            } else {
+                "मास्टर, ऑफलाइन मोड चालू कर दिया गया है। बिना इंटरनेट के भी टॉर्च, कॉलिंग, अलार्म, वॉल्यूम, नोट्स और इमरजेंसी SOS सक्रिय हैं।"
+            }
+            return CommandResult(spokenResponse = reply, actionTaken = SnehaAction.ConversationalAnswer(reply))
+        }
+
+        // 0d. Zero-Internet Offline Voice Processor (If no internet or offline mode active)
+        if (OfflineVoiceManager.isOfflineActive(context)) {
+            OfflineVoiceManager.processOfflineCommand(context, input)?.let { offlineResp ->
+                return CommandResult(
+                    spokenResponse = offlineResp,
+                    actionTaken = SnehaAction.ConversationalAnswer(offlineResp)
+                )
+            }
+        }
+
         // 1a. WhatsApp Call Command ("व्हाट्सएप कॉल करो राहुल", "whatsapp call to rahul", "व्हाट्सएप पर कॉल लगाओ")
         val isWhatsAppCall = (lower.contains("whatsapp") || lower.contains("व्हाट्सएप") || lower.contains("वाट्सएप")) &&
                 (lower.contains("call") || lower.contains("कॉल") || lower.contains("फोन") || lower.contains("लगाओ") || lower.contains("मिलाओ"))

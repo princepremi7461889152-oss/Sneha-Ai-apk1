@@ -366,6 +366,8 @@ private fun VoiceAndUserTab(
     var sosPhone by remember { mutableStateOf(com.example.engine.EmergencySosManager.getEmergencyContactPhone(context)) }
     var notesList by remember { mutableStateOf(com.example.engine.VoiceNotesManager.getAllNotes(context)) }
     var newNoteInput by remember { mutableStateOf("") }
+    var activeLanguage by remember { mutableStateOf(com.example.engine.RegionalLanguageManager.currentLanguage.value) }
+    var isOfflineModeForced by remember { mutableStateOf(com.example.engine.OfflineVoiceManager.isOfflineForced.value) }
 
     var customTestSentence by remember { mutableStateOf("नमस्ते $customUserName! मैं स्नेहा हूँ, आपकी महिला AI असिस्टेंट।") }
 
@@ -1186,6 +1188,168 @@ private fun VoiceAndUserTab(
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // 3g. Regional Languages & Dialects Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("card_regional_languages"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = SnehaDarkSurface),
+                border = BorderStroke(1.5.dp, SnehaCyan)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(SnehaCyan.copy(alpha = 0.2f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("🗣️", fontSize = 20.sp)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "क्षेत्रीय भाषाएँ व बोलियाँ (Languages) 🗣️",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SnehaTextPrimary
+                            )
+                            Text(
+                                text = "सक्रिय: ${activeLanguage.displayName} ${activeLanguage.flagEmoji}",
+                                fontSize = 12.sp,
+                                color = SnehaCyan,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "स्नेहा आपकी स्थानीय भाषा और बोली समझती है। अपनी पसंदीदा भाषा चुनें या बोलें (उदा. 'भोजपुरी में बोलो'):",
+                        fontSize = 11.sp,
+                        color = SnehaTextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        com.example.engine.RegionalLanguage.entries.forEach { lang ->
+                            val isSelected = activeLanguage == lang
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    activeLanguage = lang
+                                    com.example.engine.RegionalLanguageManager.setLanguage(context, lang)
+                                    onTestCustomPhrase(lang.nativeGreeting)
+                                    Toast.makeText(context, "${lang.displayName} सेट की गई", Toast.LENGTH_SHORT).show()
+                                },
+                                label = {
+                                    Text(
+                                        text = "${lang.flagEmoji} ${lang.displayName}",
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = SnehaCyan.copy(alpha = 0.25f),
+                                    selectedLabelColor = SnehaCyan,
+                                    containerColor = SnehaDarkSurfaceVariant,
+                                    labelColor = SnehaTextSecondary
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = isSelected,
+                                    borderColor = SnehaDarkSurfaceVariant,
+                                    selectedBorderColor = SnehaCyan
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3h. Offline Voice Mode Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("card_offline_mode"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = SnehaDarkSurface),
+                border = BorderStroke(1.5.dp, if (isOfflineModeForced) SnehaPink else SnehaEmerald)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .background((if (isOfflineModeForced) SnehaPink else SnehaEmerald).copy(alpha = 0.2f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("📶", fontSize = 20.sp)
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "ऑफ़लाइन वॉयस मोड (Offline Mode) ⚡",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SnehaTextPrimary
+                                )
+                                Text(
+                                    text = if (isOfflineModeForced) "सक्रिय: बिना इंटरनेट मोड ऑन" else "ऑटो: इंटरनेट न होने पर स्वतः सक्रिय",
+                                    fontSize = 12.sp,
+                                    color = if (isOfflineModeForced) SnehaPink else SnehaEmerald
+                                )
+                            }
+                        }
+
+                        Switch(
+                            checked = isOfflineModeForced,
+                            onCheckedChange = { enable ->
+                                isOfflineModeForced = enable
+                                com.example.engine.OfflineVoiceManager.setForceOffline(context, enable)
+                                if (enable) {
+                                    onTestCustomPhrase("मास्टर, ऑफलाइन वॉयस मोड सक्रिय है। बिना इंटरनेट के भी टॉर्च, कॉलिंग, अलार्म, वॉल्यूम, मैथ और नोट्स काम करेंगे।")
+                                    Toast.makeText(context, "ऑफलाइन मोड चालू हो गया!", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    onTestCustomPhrase("मास्टर, ऑफलाइन मोड बंद कर दिया गया है। स्नेहा अब ऑनलाइन कनेक्टेड है।")
+                                    Toast.makeText(context, "ऑफलाइन मोड बंद किया गया", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.Black,
+                                checkedTrackColor = SnehaPink
+                            ),
+                            modifier = Modifier.testTag("switch_offline_mode")
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "बिना इंटरनेट के भी निम्नलिखित फीचर्स तुरंत काम करते हैं:\n• टॉर्च ऑन/ऑफ • सीधे फोन कॉल • टाइम व बैटरी लेवल • वॉल्यूम कंट्रोल • ऑन-डिवाइस कैलकुलेटर व प्रतिशत • वॉयस नोट्स डायरी • इमरजेंसी SOS (GPS SMS)",
+                        fontSize = 11.sp,
+                        color = SnehaTextSecondary,
+                        lineHeight = 16.sp
+                    )
                 }
             }
         }

@@ -142,4 +142,29 @@ class ExampleUnitTest {
         org.junit.Assert.assertEquals(com.example.ui.theme.SnehaAppTheme.AMOLED_DARK, com.example.ui.theme.SnehaAppTheme.fromId("amoled_dark"))
         org.junit.Assert.assertEquals(com.example.ui.theme.SnehaAppTheme.ROYAL_EMERALD, com.example.ui.theme.SnehaAppTheme.fromId("royal_emerald"))
     }
+
+    @Test
+    fun testRegionalLanguages_allEntriesAndIds() {
+        val langs = com.example.engine.RegionalLanguage.entries
+        org.junit.Assert.assertEquals(6, langs.size)
+
+        org.junit.Assert.assertEquals(com.example.engine.RegionalLanguage.HINDI, com.example.engine.RegionalLanguage.fromId("hi"))
+        org.junit.Assert.assertEquals(com.example.engine.RegionalLanguage.BHOJPURI, com.example.engine.RegionalLanguage.fromId("bho"))
+        org.junit.Assert.assertEquals(com.example.engine.RegionalLanguage.MAITHILI, com.example.engine.RegionalLanguage.fromId("mai"))
+        org.junit.Assert.assertEquals(com.example.engine.RegionalLanguage.PUNJABI, com.example.engine.RegionalLanguage.fromId("pa"))
+        org.junit.Assert.assertEquals(com.example.engine.RegionalLanguage.BENGALI, com.example.engine.RegionalLanguage.fromId("bn"))
+        org.junit.Assert.assertEquals(com.example.engine.RegionalLanguage.ENGLISH, com.example.engine.RegionalLanguage.fromId("en"))
+        // Fallback
+        org.junit.Assert.assertEquals(com.example.engine.RegionalLanguage.HINDI, com.example.engine.RegionalLanguage.fromId("unknown"))
+    }
+
+    @Test
+    fun testSmartHomeManager_defaultDevices() {
+        val devices = com.example.engine.SmartHomeManager.devices.value
+        org.junit.Assert.assertTrue(devices.isNotEmpty())
+        org.junit.Assert.assertTrue(devices.any { it.type == com.example.engine.DeviceType.LIGHT })
+        org.junit.Assert.assertTrue(devices.any { it.type == com.example.engine.DeviceType.FAN })
+        org.junit.Assert.assertTrue(devices.any { it.type == com.example.engine.DeviceType.AC })
+        org.junit.Assert.assertTrue(devices.any { it.type == com.example.engine.DeviceType.TV })
+    }
 }

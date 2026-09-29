@@ -29,6 +29,8 @@ sealed class SnehaAction {
     object OpenAntiTheft : SnehaAction()
     object OpenCallSummary : SnehaAction()
     object OpenAiConnector : SnehaAction()
+    object OpenSmartHome : SnehaAction()
+    object OpenCreativeStudio : SnehaAction()
     data class SetCustomWakeWord(val newName: String) : SnehaAction()
     data class ChangeVoicePersona(val personaName: String) : SnehaAction()
     data class AdjustSpeechRate(val rate: Float) : SnehaAction()

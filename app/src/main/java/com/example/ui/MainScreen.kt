@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Emergency
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PhoneInTalk
@@ -251,6 +252,12 @@ fun MainScreen(
                 is SnehaAction.OpenAiConnector -> {
                     currentScreen = SnehaScreen.AI_CONNECTOR
                 }
+                is SnehaAction.OpenSmartHome -> {
+                    currentScreen = SnehaScreen.SMART_HOME
+                }
+                is SnehaAction.OpenCreativeStudio -> {
+                    currentScreen = SnehaScreen.CREATIVE_STUDIO
+                }
                 is SnehaAction.SetCustomWakeWord -> {
                     val act = cmdResult.actionTaken as SnehaAction.SetCustomWakeWord
                     com.example.data.local.VoicePreferences.saveCustomWakeWord(context, act.newName)
@@ -284,10 +291,10 @@ fun MainScreen(
 
     val navItems = listOf(
         NavItem(SnehaScreen.ASSISTANT, "स्नेहा", Icons.Default.AutoAwesome, "nav_assistant"),
+        NavItem(SnehaScreen.SMART_HOME, "स्मार्ट होम", Icons.Default.Home, "nav_smart_home"),
         NavItem(SnehaScreen.SPAM_BLOCKER, "स्पैम गार्ड", Icons.Default.Shield, "nav_spam_blocker"),
         NavItem(SnehaScreen.WHATSAPP_AUTO_REPLY, "व्हाट्सएप", Icons.Default.Sms, "nav_whatsapp"),
         NavItem(SnehaScreen.CALL_TRANSLATOR, "ट्रांसलेटर", Icons.Default.Translate, "nav_translator"),
-        NavItem(SnehaScreen.CLASS_TIMETABLE, "टाइमटेबल", Icons.Default.School, "nav_timetable"),
         NavItem(SnehaScreen.SETTINGS, "सेटिंग्स", Icons.Default.Settings, "nav_settings")
     )
 
@@ -711,6 +718,19 @@ fun MainScreen(
 
                     SnehaScreen.AI_CONNECTOR -> {
                         CloudConnectorScreen()
+                    }
+
+                    SnehaScreen.SMART_HOME -> {
+                        com.example.ui.screens.SmartHomeScreen(
+                            onBack = { currentScreen = SnehaScreen.ASSISTANT },
+                            onVoiceCommand = { executeUserQuery(it) }
+                        )
+                    }
+
+                    SnehaScreen.CREATIVE_STUDIO -> {
+                        com.example.ui.screens.GeminiCreativeStudioScreen(
+                            onBack = { currentScreen = SnehaScreen.ASSISTANT }
+                        )
                     }
                 }
             }

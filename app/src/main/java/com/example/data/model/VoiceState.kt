@@ -23,5 +23,7 @@ enum class SnehaScreen {
     SCREEN_SHARE,
     SAFE_MESSAGES,
     EMERGENCY,
+    SMART_HOME,
+    CREATIVE_STUDIO,
     SETTINGS
 }

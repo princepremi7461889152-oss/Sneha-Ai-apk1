@@ -46,6 +46,23 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
+      - name: Prepare environment and Firebase configs
+        run: |
+          if [ -f "./google-services.json" ]; then
+            mkdir -p app
+            cp -f ./google-services.json app/google-services.json
+            echo "Copied ./google-services.json to app/google-services.json"
+          fi
+          if [ ! -f ".env" ]; then
+            if [ -f ".env.example" ]; then
+              cp .env.example .env
+              echo "Created .env from .env.example"
+            else
+              touch .env
+              echo "Created empty .env"
+            fi
+          fi
+
       - name: Create temporary debug keystore
         run: |
           if [ -f "./debug.keystore" ]; then
