@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "419785627676",
+    "project_id": "nandita-80444",
+    "storage_bucket": "nandita-80444.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:419785627676:android:0b5c42c0688ccbebdae7d9",
+        "android_client_info": {
+          "package_name": "com.sneha.ai"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "419785627676-fgpe5l2mqua2j8efdn98cpsl113nkh5u.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB3YC4H-IJ1szHRFzC0wPJl-RgpVxSJSSA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "419785627676-fgpe5l2mqua2j8efdn98cpsl113nkh5u.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
