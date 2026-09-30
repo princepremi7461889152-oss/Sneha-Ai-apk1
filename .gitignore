@@ -16,3 +16,4 @@ local.properties
 .env
 .build-outputs/
 app/build/
+.kotlin/

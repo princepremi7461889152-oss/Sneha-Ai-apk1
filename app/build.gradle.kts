@@ -40,6 +40,16 @@ android {
     }
 }
 
+val envFile = rootProject.file(".env")
+if (!envFile.exists()) {
+    val example = rootProject.file(".env.example")
+    if (example.exists()) {
+        example.copyTo(envFile, overwrite = false)
+    } else {
+        envFile.writeText("GEMINI_API_KEY=\"MY_GEMINI_API_KEY\"\n")
+    }
+}
+
 secrets {
     propertiesFileName = "secrets.properties"
     defaultPropertiesFileName = ".env"
