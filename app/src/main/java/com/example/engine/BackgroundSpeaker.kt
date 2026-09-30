@@ -23,11 +23,41 @@ object BackgroundSpeaker : TextToSpeech.OnInitListener {
     private val _isSpeaking = MutableStateFlow(false)
     val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
 
+    private val recentUtterances = java.util.Collections.synchronizedList(mutableListOf<String>())
+    var lastSpeechEndTimeMs = 0L
+        private set
+
     var onSpeechDone: (() -> Unit)? = null
 
     var isAutoReadMessagesEnabled = true
     var speechRate = 1.0f
     var speechPitch = 1.05f
+
+    fun isSelfEcho(recognizedText: String): Boolean {
+        if (_isSpeaking.value) return true
+        val timeSinceSpeech = System.currentTimeMillis() - lastSpeechEndTimeMs
+        if (timeSinceSpeech < 2500L) {
+            val lower = recognizedText.lowercase().trim()
+            if (lower.isBlank()) return true
+
+            val listCopy = synchronized(recentUtterances) { recentUtterances.toList() }
+            for (utterance in listCopy) {
+                if (utterance.contains(lower) || lower.contains(utterance)) {
+                    Log.d(TAG, "Discarded self-echo: '$lower' matches utterance '$utterance'")
+                    return true
+                }
+                val recognizedWords = lower.split(Regex("\\s+")).filter { it.length > 2 }
+                if (recognizedWords.isNotEmpty()) {
+                    val matchCount = recognizedWords.count { utterance.contains(it) }
+                    if (matchCount.toFloat() / recognizedWords.size >= 0.5f) {
+                        Log.d(TAG, "Discarded self-echo by word overlap: '$lower'")
+                        return true
+                    }
+                }
+            }
+        }
+        return false
+    }
 
     fun initialize(context: Context) {
         speechRate = com.example.data.local.VoicePreferences.getSpeechRate(context)
@@ -108,6 +138,7 @@ object BackgroundSpeaker : TextToSpeech.OnInitListener {
 
                 override fun onDone(utteranceId: String?) {
                     _isSpeaking.value = false
+                    lastSpeechEndTimeMs = System.currentTimeMillis()
                     try {
                         onSpeechDone?.invoke()
                     } catch (ignored: Exception) {}
@@ -115,6 +146,7 @@ object BackgroundSpeaker : TextToSpeech.OnInitListener {
 
                 override fun onError(utteranceId: String?) {
                     _isSpeaking.value = false
+                    lastSpeechEndTimeMs = System.currentTimeMillis()
                     try {
                         onSpeechDone?.invoke()
                     } catch (ignored: Exception) {}
@@ -136,6 +168,13 @@ object BackgroundSpeaker : TextToSpeech.OnInitListener {
     fun speak(text: String, queueMode: Int = TextToSpeech.QUEUE_FLUSH) {
         val clean = text.replace("*", "").replace("#", "").replace("`", "").trim()
         if (clean.isBlank()) return
+
+        synchronized(recentUtterances) {
+            recentUtterances.add(clean.lowercase())
+            if (recentUtterances.size > 8) {
+                recentUtterances.removeAt(0)
+            }
+        }
 
         if (textToSpeech == null || !isInitialized) {
             synchronized(pendingQueue) {

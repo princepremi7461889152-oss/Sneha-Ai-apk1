@@ -60,8 +60,36 @@ class VoiceSpeechManager(private val context: Context) : TextToSpeech.OnInitList
 
     private var restartListeningJob: Job? = null
     private var toneGenerator: ToneGenerator? = null
-    private var lastSpokenText: String = ""
-    private var lastSpokenTime: Long = 0L
+
+    private val recentUtterances = java.util.Collections.synchronizedList(mutableListOf<String>())
+    var lastSpeechEndTimeMs = 0L
+        private set
+
+    fun isSelfEcho(recognizedText: String): Boolean {
+        if (isSpeaking()) return true
+        val timeSinceSpeech = System.currentTimeMillis() - lastSpeechEndTimeMs
+        if (timeSinceSpeech < 2500L) {
+            val lower = recognizedText.lowercase().trim()
+            if (lower.isBlank()) return true
+
+            val listCopy = synchronized(recentUtterances) { recentUtterances.toList() }
+            for (utterance in listCopy) {
+                if (utterance.contains(lower) || lower.contains(utterance)) {
+                    Log.d(tag, "Discarded self-echo: '$lower' matches utterance '$utterance'")
+                    return true
+                }
+                val recognizedWords = lower.split(Regex("\\s+")).filter { it.length > 2 }
+                if (recognizedWords.isNotEmpty()) {
+                    val matchCount = recognizedWords.count { utterance.contains(it) }
+                    if (matchCount.toFloat() / recognizedWords.size >= 0.5f) {
+                        Log.d(tag, "Discarded self-echo by word overlap: '$lower'")
+                        return true
+                    }
+                }
+            }
+        }
+        return false
+    }
 
     init {
         try {
@@ -143,26 +171,21 @@ class VoiceSpeechManager(private val context: Context) : TextToSpeech.OnInitList
             textToSpeech?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {
                     _voiceState.value = VoiceState.SPEAKING
-                    lastSpokenTime = System.currentTimeMillis()
-                    try {
-                        speechRecognizer?.cancel()
-                    } catch (ignored: Exception) {}
-                    isRecognizerBusy = false
                 }
 
                 override fun onDone(utteranceId: String?) {
-                    lastSpokenTime = System.currentTimeMillis()
+                    lastSpeechEndTimeMs = System.currentTimeMillis()
                     _voiceState.value = if (_isContinuousListening.value) VoiceState.LISTENING else VoiceState.IDLE
                     _audioAmplitude.value = 0f
-                    // Delay 650ms so speaker audio vibrations and room echo completely die down
-                    scheduleContinuousListenResume(650L)
+                    // Wait 800ms for room echo and speaker decay before resuming continuous listening
+                    scheduleContinuousListenResume(800L)
                 }
 
                 override fun onError(utteranceId: String?) {
-                    lastSpokenTime = System.currentTimeMillis()
+                    lastSpeechEndTimeMs = System.currentTimeMillis()
                     _voiceState.value = if (_isContinuousListening.value) VoiceState.LISTENING else VoiceState.IDLE
                     _audioAmplitude.value = 0f
-                    scheduleContinuousListenResume(400L)
+                    scheduleContinuousListenResume(800L)
                 }
             })
 
@@ -314,9 +337,21 @@ class VoiceSpeechManager(private val context: Context) : TextToSpeech.OnInitList
 
                 val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 val text = matches?.firstOrNull()?.trim() ?: ""
-                _spokenTextLive.value = text
 
                 if (text.isNotBlank()) {
+                    // Strict self-echo & speaking check
+                    if (isSpeaking() || isSelfEcho(text) || BackgroundSpeaker.isSelfEcho(text)) {
+                        Log.d(tag, "Ignored self-echo in foreground: '$text'")
+                        _spokenTextLive.value = ""
+                        if (_isContinuousListening.value) {
+                            scheduleContinuousListenResume(600L)
+                        } else {
+                            _voiceState.value = VoiceState.IDLE
+                        }
+                        return
+                    }
+
+                    _spokenTextLive.value = text
                     _voiceState.value = VoiceState.THINKING
                     handleRecognizedText(text)
                 } else if (_isContinuousListening.value) {
@@ -405,27 +440,6 @@ class VoiceSpeechManager(private val context: Context) : TextToSpeech.OnInitList
 
     private fun handleRecognizedText(text: String) {
         val lower = text.lowercase().trim()
-
-        // 1. Strict Echo & Self-Voice Suppression:
-        // If TTS is currently speaking or just finished within 1400ms, check if recognized text is an echo
-        val timeSinceSpeech = System.currentTimeMillis() - lastSpokenTime
-        if (isSpeaking() || timeSinceSpeech < 1400L) {
-            val lastClean = lastSpokenText.lowercase().trim()
-            val isEcho = (lastClean.isNotBlank() && (lastClean.contains(lower) || lower.contains(lastClean))) ||
-                    lower.contains("जी मास्टर") || lower.contains("हाजिर हूँ") ||
-                    lower.contains("बोल रही हूँ") || lower.contains("सुन रही हूँ") ||
-                    lower.contains("आज्ञा दीजिए") || lower.contains("मेरे जानू") ||
-                    (lastClean.length > 6 && lower.length > 6 && (lastClean.startsWith(lower.take(6)) || lower.startsWith(lastClean.take(6))))
-
-            if (isEcho) {
-                Log.d(tag, "Suppressed acoustic feedback / self-voice echo: '$text'")
-                if (_isContinuousListening.value) {
-                    scheduleContinuousListenResume(500L)
-                }
-                return
-            }
-        }
-
         val customWake = VoicePreferences.getCustomWakeWord(context).lowercase().trim()
 
         val defaultWakeList = listOf(
@@ -454,11 +468,7 @@ class VoiceSpeechManager(private val context: Context) : TextToSpeech.OnInitList
         if (isJustCalling) {
             playWakeBeep()
             onWakeWordDetected?.invoke()
-            if (currentPersona.id == com.example.data.model.VoicePersonaId.GIRLFRIEND) {
-                speak("हाँ मेरे जानू! मैं हाजिर हूँ, आज्ञा दीजिए! ❤️")
-            } else {
-                speak("जी मास्टर! मैं हाजिर हूँ, आज्ञा दीजिए!")
-            }
+            speak("जी मास्टर! मैं हाजिर हूँ, आज्ञा दीजिए!")
         } else {
             // Full command recognized
             onSpeechRecognized?.invoke(text)
@@ -513,6 +523,17 @@ class VoiceSpeechManager(private val context: Context) : TextToSpeech.OnInitList
 
         if (cleanText.isBlank()) return
 
+        // Immediately stop microphone listener so it NEVER picks up its own voice
+        stopListening()
+        restartListeningJob?.cancel()
+
+        synchronized(recentUtterances) {
+            recentUtterances.add(cleanText.lowercase())
+            if (recentUtterances.size > 8) {
+                recentUtterances.removeAt(0)
+            }
+        }
+
         if (!isTtsReady || textToSpeech == null) {
             synchronized(pendingSpeechQueue) {
                 pendingSpeechQueue.add(cleanText)
@@ -521,17 +542,6 @@ class VoiceSpeechManager(private val context: Context) : TextToSpeech.OnInitList
         }
 
         stopSpeaking()
-        restartListeningJob?.cancel()
-
-        // Mute recognizer immediately while speaking to prevent self-voice capture
-        try {
-            speechRecognizer?.stopListening()
-            speechRecognizer?.cancel()
-        } catch (ignored: Exception) {}
-        isRecognizerBusy = false
-
-        lastSpokenText = cleanText
-        lastSpokenTime = System.currentTimeMillis()
 
         _voiceState.value = VoiceState.SPEAKING
         textToSpeech?.setSpeechRate(speechRate)

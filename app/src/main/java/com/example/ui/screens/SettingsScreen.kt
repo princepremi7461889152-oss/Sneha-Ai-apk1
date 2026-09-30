@@ -786,6 +786,155 @@ private fun VoiceAndUserTab(
             }
         }
 
+        // 3b2. Autonomous Screen & OS Controller Card
+        item {
+            val isA11yEnabled = com.example.service.SnehaAccessibilityService.isAccessibilitySettingsEnabled(context)
+            val amberColor = Color(0xFFF59E0B)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("card_autonomous_controller"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = SnehaDarkSurface),
+                border = BorderStroke(1.5.dp, if (isA11yEnabled) SnehaCyan else amberColor)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(if (isA11yEnabled) SnehaCyan.copy(alpha = 0.2f) else amberColor.copy(alpha = 0.2f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("🤖", fontSize = 20.sp)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "ऑटोनॉमस स्क्रीन & OS कंट्रोलर 🤖",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SnehaTextPrimary
+                            )
+                            Text(
+                                text = if (isA11yEnabled) "सक्रिय: स्क्रीन टैप, स्वाइप, पढ़ना चालू 🟢" else "अनुमति आवश्यक: एक्सेसिबिलिटी चालू करें 🔴",
+                                fontSize = 12.sp,
+                                color = if (isA11yEnabled) SnehaCyan else amberColor,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "वॉयस से पूरी स्क्रीन कंट्रोल करें: Home, Back, Tap, Swipe, स्क्रीन पढ़ना, टाइपिंग, स्क्रीनशॉट, अलार्म, टाइमर, और किसी भी ऐप में सर्च करना।",
+                        fontSize = 11.sp,
+                        color = SnehaTextSecondary
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Button(
+                        onClick = {
+                            try {
+                                val intent = android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                                    flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                }
+                                context.startActivity(intent)
+                                Toast.makeText(context, "कृपया 'Sneha Screen & OS Controller' को ON करें", Toast.LENGTH_LONG).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "सेटिंग्स खोलने में असमर्थ", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isA11yEnabled) SnehaDarkSurfaceVariant else amberColor
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("btn_open_a11y_settings")
+                    ) {
+                        Text(
+                            text = if (isA11yEnabled) "⚙️ एक्सेसिबिलिटी सेटिंग्स देखें" else "⚡ एक्सेसिबिलिटी परमिशन ON करें",
+                            color = if (isA11yEnabled) SnehaCyan else Color.Black,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "त्वरित स्क्रीन टेस्ट (Quick Test Buttons):",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SnehaTextPrimary
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        FilterChip(
+                            selected = false,
+                            onClick = {
+                                com.example.service.SnehaAccessibilityService.instance?.goHome()
+                                    ?: Toast.makeText(context, "कृपया पहले एक्सेसिबिलिटी ON करें", Toast.LENGTH_SHORT).show()
+                            },
+                            label = { Text("🏠 Home", fontSize = 11.sp) }
+                        )
+                        FilterChip(
+                            selected = false,
+                            onClick = {
+                                com.example.service.SnehaAccessibilityService.instance?.goBack()
+                                    ?: Toast.makeText(context, "कृपया पहले एक्सेसिबिलिटी ON करें", Toast.LENGTH_SHORT).show()
+                            },
+                            label = { Text("⬅️ Back", fontSize = 11.sp) }
+                        )
+                        FilterChip(
+                            selected = false,
+                            onClick = {
+                                com.example.service.SnehaAccessibilityService.instance?.openRecents()
+                                    ?: Toast.makeText(context, "कृपया पहले एक्सेसिबिलिटी ON करें", Toast.LENGTH_SHORT).show()
+                            },
+                            label = { Text("📑 Recent", fontSize = 11.sp) }
+                        )
+                        FilterChip(
+                            selected = false,
+                            onClick = {
+                                com.example.service.SnehaAccessibilityService.instance?.captureScreenshot()
+                                    ?: Toast.makeText(context, "कृपया पहले एक्सेसिबिलिटी ON करें", Toast.LENGTH_SHORT).show()
+                            },
+                            label = { Text("📸 Screenshot", fontSize = 11.sp) }
+                        )
+                        FilterChip(
+                            selected = false,
+                            onClick = {
+                                val text = com.example.service.SnehaAccessibilityService.instance?.readScreenContent()
+                                if (text != null) {
+                                    onTestCustomPhrase(text)
+                                } else {
+                                    Toast.makeText(context, "कृपया पहले एक्सेसिबिलिटी ON करें", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            label = { Text("📖 स्क्रीन पढ़ें", fontSize = 11.sp) }
+                        )
+                        FilterChip(
+                            selected = false,
+                            onClick = {
+                                com.example.service.SnehaAccessibilityService.instance?.scrollDown()
+                                    ?: Toast.makeText(context, "कृपया पहले एक्सेसिबिलिटी ON करें", Toast.LENGTH_SHORT).show()
+                            },
+                            label = { Text("⬇️ नीचे स्क्रॉल", fontSize = 11.sp) }
+                        )
+                    }
+                }
+            }
+        }
+
         // 3c. Custom App Themes Card
         item {
             Card(

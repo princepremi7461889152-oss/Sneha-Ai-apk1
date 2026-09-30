@@ -232,6 +232,14 @@ object SnehaCommandEngine {
             )
         }
 
+        // 1i. Autonomous Screen & OS Controller Commands (Tap, Swipe, Type, Home, Back, Recents, Apps, Files, Camera, Gallery, Screenshot, Settings, Alarm, Calendar, Search)
+        AutonomousScreenController.handleAutonomousCommand(context, input)?.let { screenResult ->
+            return CommandResult(
+                spokenResponse = screenResult,
+                actionTaken = SnehaAction.ConversationalAnswer(screenResult)
+            )
+        }
+
         // 2. Strict Security Guard: Direct request for private OTP
         if ((lower.contains("otp") || lower.contains("ओटीपी") || lower.contains("पासवर्ड") || lower.contains("password")) &&
             (lower.contains("पढ़ो") || lower.contains("पढ़ो") || lower.contains("read") || lower.contains("बताओ") || lower.contains("tell") || lower.contains("क्या है"))

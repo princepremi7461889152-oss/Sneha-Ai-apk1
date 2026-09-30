@@ -31,18 +31,100 @@ object GeminiApiClient {
         "नियम 4: सुरक्षा कारणों से किसी का बैंक OTP कभी न बताएं।"
 
     suspend fun getSnehaAiResponse(userPrompt: String): String = withContext(Dispatchers.IO) {
+        // 1. Check if user switched to ChatGPT, Claude, or Custom Cloud LLM
         try {
-            val result = com.example.engine.SmartKnowledgeRouter.resolveAnyQuestion(
-                context = com.example.SnehaApplication.instance,
-                userQuery = userPrompt
+            val activeProvider = com.example.engine.AiCloudConnectorManager.activeProvider.value
+            if (activeProvider != com.example.engine.AiProvider.GEMINI) {
+                val cloudRes = com.example.engine.AiCloudConnectorManager.generateResponse(
+                    context = com.example.SnehaApplication.instance,
+                    prompt = "$SYSTEM_PROMPT\n\nयूजर: $userPrompt"
+                )
+                if (cloudRes.isNotBlank()) {
+                    return@withContext cloudRes
+                }
+            }
+        } catch (ignored: Exception) {}
+
+        val apiKey = try {
+            val customGeminiKey = com.example.engine.AiCloudConnectorManager.getApiKey(
+                com.example.SnehaApplication.instance,
+                com.example.engine.AiProvider.GEMINI
             )
-            if (result.answer.isNotBlank()) {
-                return@withContext result.answer
+            if (customGeminiKey.isNotBlank()) customGeminiKey else BuildConfig.GEMINI_API_KEY
+        } catch (e: Exception) {
+            ""
+        }
+
+        if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") {
+            return@withContext com.example.engine.SnehaKnowledgeEngine.answerQuestion(
+                com.example.SnehaApplication.instance,
+                userPrompt
+            )
+        }
+
+        try {
+            val endpoint = "$BASE_URL$MODEL:generateContent?key=$apiKey"
+
+            val jsonBody = JSONObject().apply {
+                put("systemInstruction", JSONObject().apply {
+                    put("parts", JSONArray().apply {
+                        put(JSONObject().apply { put("text", SYSTEM_PROMPT) })
+                    })
+                })
+                put("contents", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("role", "user")
+                        put("parts", JSONArray().apply {
+                            put(JSONObject().apply { put("text", userPrompt) })
+                        })
+                    })
+                })
+                put("generationConfig", JSONObject().apply {
+                    put("temperature", 0.7)
+                    put("maxOutputTokens", 300)
+                })
+            }
+
+            val request = Request.Builder()
+                .url(endpoint)
+                .post(jsonBody.toString().toRequestBody("application/json".toMediaType()))
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string() ?: ""
+                if (!response.isSuccessful) {
+                    Log.w(TAG, "Gemini API error ${response.code}: $bodyStr")
+                    return@withContext com.example.engine.SnehaKnowledgeEngine.answerQuestion(
+                        com.example.SnehaApplication.instance,
+                        userPrompt
+                    )
+                }
+
+                val jsonResponse = JSONObject(bodyStr)
+                val candidates = jsonResponse.optJSONArray("candidates")
+                if (candidates != null && candidates.length() > 0) {
+                    val candidate = candidates.getJSONObject(0)
+                    val content = candidate.optJSONObject("content")
+                    val parts = content?.optJSONArray("parts")
+                    if (parts != null && parts.length() > 0) {
+                        val text = parts.getJSONObject(0).optString("text", "")
+                        if (text.isNotBlank()) {
+                            return@withContext text.trim()
+                        }
+                    }
+                }
+                com.example.engine.SnehaKnowledgeEngine.answerQuestion(
+                    com.example.SnehaApplication.instance,
+                    userPrompt
+                )
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error in SmartKnowledgeRouter", e)
+            Log.e(TAG, "Exception calling Gemini API", e)
+            com.example.engine.SnehaKnowledgeEngine.answerQuestion(
+                com.example.SnehaApplication.instance,
+                userPrompt
+            )
         }
-        getOfflineSnehaResponse(userPrompt)
     }
 
     /**

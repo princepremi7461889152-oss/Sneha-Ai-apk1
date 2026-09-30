@@ -25,6 +25,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.example.MainActivity
 import com.example.data.local.SnehaDatabase
+import com.example.data.local.VoicePreferences
 import com.example.engine.BackgroundSpeaker
 import com.example.engine.LockScreenHelper
 import com.example.engine.OtpSafetyGuard
@@ -42,6 +43,7 @@ class SnehaVoiceService : Service() {
     private var isListeningForWakeWord = false
     private var toneGenerator: ToneGenerator? = null
     private var wakeLock: android.os.PowerManager.WakeLock? = null
+    private var activeWakeSessionUntilMs: Long = 0L
 
     companion object {
         const val CHANNEL_ID = "sneha_voice_channel_v2"
@@ -60,17 +62,18 @@ class SnehaVoiceService : Service() {
         const val EXTRA_TRIGGER_SOS = "extra_trigger_sos"
         const val EXTRA_SCREEN_SHARE = "extra_screen_share"
 
+        @Volatile
+        var instance: SnehaVoiceService? = null
+            internal set
+
+        val isServiceRunning: Boolean
+            get() = instance != null
+
         fun pauseListeningForForeground(context: Context) {
-            try {
-                val intent = Intent(context, SnehaVoiceService::class.java).apply {
-                    action = ACTION_PAUSE_FOR_FOREGROUND
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    context.startForegroundService(intent)
-                } else {
-                    context.startService(intent)
-                }
-            } catch (ignored: Exception) {}
+            // Never start a foreground service just to pause!
+            // If the service is running, pause listening directly in memory.
+            if (!isServiceRunning) return
+            instance?.stopWakeWordListening()
         }
 
         fun resumeListeningFromForeground(context: Context) {
@@ -78,16 +81,13 @@ class SnehaVoiceService : Service() {
                 context, Manifest.permission.RECORD_AUDIO
             ) == PackageManager.PERMISSION_GRANTED
             if (!hasMicPermission) return
-            try {
-                val intent = Intent(context, SnehaVoiceService::class.java).apply {
-                    action = ACTION_RESUME_FROM_FOREGROUND
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    context.startForegroundService(intent)
-                } else {
-                    context.startService(intent)
-                }
-            } catch (ignored: Exception) {}
+            if (!VoicePreferences.isBackgroundVoiceActive(context)) return
+
+            if (instance != null) {
+                instance?.startWakeWordListening()
+            } else {
+                startService(context)
+            }
         }
 
         fun startService(context: Context) {
@@ -128,11 +128,25 @@ class SnehaVoiceService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         createNotificationChannel()
+
+        // Immediate startForeground call in onCreate satisfies Android OS requirement without delay
+        try {
+            val notification = buildForegroundNotification()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (e: Exception) {
+            Log.e("SnehaVoiceService", "Error calling startForeground in onCreate", e)
+        }
+
         BackgroundSpeaker.initialize(this)
         BackgroundSpeaker.onSpeechDone = {
             if (isListeningForWakeWord) {
-                mainHandler.postDelayed({ restartListeningInternal() }, 200L)
+                mainHandler.postDelayed({ restartListeningInternal() }, 800L)
             }
         }
         try {
@@ -171,6 +185,7 @@ class SnehaVoiceService : Service() {
 
         if (!hasMicPermission) {
             Log.w("SnehaVoiceService", "RECORD_AUDIO not granted, stopping service gracefully")
+            stopWakeWordListening()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
@@ -263,6 +278,14 @@ class SnehaVoiceService : Service() {
                             val text = matches?.firstOrNull()?.trim() ?: ""
 
                             if (text.isNotBlank()) {
+                                // 1. Strict self-echo & speaking check
+                                if (BackgroundSpeaker.isSpeaking.value || BackgroundSpeaker.isSelfEcho(text)) {
+                                    Log.d("SnehaVoiceService", "Ignored self-echo in background: '$text'")
+                                    if (isListeningForWakeWord) {
+                                        mainHandler.postDelayed({ restartListeningInternal() }, 600L)
+                                    }
+                                    return
+                                }
                                 handleBackgroundCommand(text)
                             } else if (isListeningForWakeWord) {
                                 mainHandler.postDelayed({ restartListeningInternal() }, 100L)
@@ -285,6 +308,11 @@ class SnehaVoiceService : Service() {
         if (!isListeningForWakeWord) return
         if (BackgroundSpeaker.isSpeaking.value) {
             // Wait for speaking to finish
+            return
+        }
+        val timeSinceSpeech = System.currentTimeMillis() - BackgroundSpeaker.lastSpeechEndTimeMs
+        if (timeSinceSpeech < 800L) {
+            mainHandler.postDelayed({ restartListeningInternal() }, 800L - timeSinceSpeech)
             return
         }
         mainHandler.post {
@@ -315,11 +343,43 @@ class SnehaVoiceService : Service() {
         val lower = text.lowercase().trim()
         val customWake = com.example.data.local.VoicePreferences.getCustomWakeWord(this).lowercase().trim()
 
-        val isJustCalling = lower == "स्नेहा" || lower == "sneha" || lower == "hey sneha" ||
-                lower == "हे स्नेहा" || lower == "सुनो स्नेहा" || lower == "सुनो" ||
-                lower == "hello sneha" || lower == "hi sneha" || lower == "ok sneha" ||
-                lower == "siri" || lower == "alexa" || lower == "हेलो स्नेहा" ||
-                (customWake.isNotBlank() && lower == customWake)
+        // 1. Strict self-echo check
+        if (BackgroundSpeaker.isSelfEcho(text)) {
+            Log.d("SnehaVoiceService", "handleBackgroundCommand: Ignored self-echo: '$text'")
+            if (isListeningForWakeWord) {
+                mainHandler.postDelayed({ restartListeningInternal() }, 600L)
+            }
+            return
+        }
+
+        val baseWakeKeywords = listOf(
+            "हे स्नेहा", "hey sneha", "सुनो स्नेहा", "hello sneha", "hi sneha", "ok sneha",
+            "स्नेहा", "sneha", "हेलो स्नेहा", "हे सुनो स्नेहा", "सुनो"
+        )
+        val allWakeKeywords = if (customWake.isNotBlank() && customWake != "स्नेहा" && customWake != "sneha") {
+            baseWakeKeywords + listOf(customWake, "hey $customWake", "हे $customWake", "hello $customWake", "hi $customWake")
+        } else {
+            baseWakeKeywords
+        }
+
+        // 2. Strict Wake-Word requirement:
+        // Must contain "स्नेहा" (wake word) OR be inside an active 10-second conversation session
+        val containsWakeWord = allWakeKeywords.any { lower.contains(it) }
+        val isWithinActiveSession = System.currentTimeMillis() < activeWakeSessionUntilMs
+
+        if (!containsWakeWord && !isWithinActiveSession) {
+            Log.d("SnehaVoiceService", "Ignored ambient speech without wake word: '$text'")
+            if (isListeningForWakeWord) {
+                mainHandler.postDelayed({ restartListeningInternal() }, 150L)
+            }
+            return
+        }
+
+        // Renew active session window for 10 seconds!
+        activeWakeSessionUntilMs = System.currentTimeMillis() + 10000L
+
+        val isJustCalling = allWakeKeywords.any { lower == it } ||
+                lower == "siri" || lower == "alexa"
 
         try {
             com.example.engine.MicChimeManager.playChime(applicationContext)
@@ -327,20 +387,24 @@ class SnehaVoiceService : Service() {
 
         if (isJustCalling) {
             LockScreenHelper.wakeUpScreen(applicationContext, 8000L)
-            BackgroundSpeaker.speak("जी मास्टर! मैं हाजिर हूँ, आज्ञा दीजिए! मैं लगातार सुन रही हूँ, आप जो कहेंगे मैं वही करूँगी।")
+            BackgroundSpeaker.speak("जी मास्टर! मैं हाजिर हूँ, आज्ञा दीजिए!")
             return
         }
 
         // Strip wake prefix if command was e.g. "स्नेहा टॉर्च जलाओ"
         var cleanInput = text
-        val wakePrefixes = listOf(
-            "हे स्नेहा", "hey sneha", "सुनो स्नेहा", "hello sneha", "hi sneha", "ok sneha",
-            "स्नेहा", "sneha", customWake
-        )
-        for (wp in wakePrefixes) {
+        for (wp in allWakeKeywords) {
             if (wp.isNotBlank() && cleanInput.startsWith(wp, ignoreCase = true)) {
                 cleanInput = cleanInput.substring(wp.length).trim()
                 break
+            }
+            val idx = cleanInput.indexOf(wp, ignoreCase = true)
+            if (idx >= 0) {
+                val candidate = (cleanInput.substring(0, idx) + " " + cleanInput.substring(idx + wp.length)).trim()
+                if (candidate.isNotBlank()) {
+                    cleanInput = candidate
+                    break
+                }
             }
         }
         if (cleanInput.isBlank()) {
@@ -504,6 +568,9 @@ class SnehaVoiceService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (instance == this) {
+            instance = null
+        }
         stopWakeWordListening()
         try {
             toneGenerator?.release()

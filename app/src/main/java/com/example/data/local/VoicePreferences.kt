@@ -51,6 +51,14 @@ object VoicePreferences {
         return getPrefs(context).getBoolean(KEY_SPAM_BLOCK_ENABLED, true)
     }
 
+    fun isBackgroundVoiceActive(context: Context): Boolean {
+        return getPrefs(context).getBoolean("background_voice_active", true)
+    }
+
+    fun saveBackgroundVoiceActive(context: Context, active: Boolean) {
+        getPrefs(context).edit().putBoolean("background_voice_active", active).apply()
+    }
+
     fun saveSpamBlockEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_SPAM_BLOCK_ENABLED, enabled).apply()
     }
