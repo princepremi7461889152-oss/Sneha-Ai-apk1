@@ -91,7 +91,9 @@ data class VoicePersona(
         )
 
         fun fromId(id: String?): VoicePersona {
-            return ALL.firstOrNull { it.id.id.equals(id, ignoreCase = true) } ?: ALL[0]
+            return ALL.firstOrNull { it.id.id.equals(id, ignoreCase = true) }
+                ?: ALL.firstOrNull { it.id == VoicePersonaId.CLASSIC }
+                ?: ALL[0]
         }
     }
 }

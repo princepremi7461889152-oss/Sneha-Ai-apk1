@@ -12,6 +12,12 @@ import android.text.TextUtils
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 class SnehaAccessibilityService : AccessibilityService() {
 
@@ -20,7 +26,47 @@ class SnehaAccessibilityService : AccessibilityService() {
         var instance: SnehaAccessibilityService? = null
             private set
 
+        private var autoScrollJob: Job? = null
+
         fun isRunning(): Boolean = instance != null
+
+        fun scrollNextReel(context: Context): Pair<Boolean, String> {
+            val inst = instance
+            if (inst == null) {
+                return Pair(false, "मास्टर, रील स्क्रॉल करने के लिए एक्सेसिबिलिटी सर्विस सक्षम करें।")
+            }
+            inst.scrollDown()
+            return Pair(true, "अगली रील स्क्रॉल कर दी गई है।")
+        }
+
+        fun scrollPreviousReel(context: Context): Pair<Boolean, String> {
+            val inst = instance
+            if (inst == null) {
+                return Pair(false, "मास्टर, एक्सेसिबिलिटी सर्विस सक्षम करें।")
+            }
+            inst.scrollUp()
+            return Pair(true, "पिछली रील बैक कर दी गई है।")
+        }
+
+        fun toggleAutoScroll(context: Context, enable: Boolean): Pair<Boolean, String> {
+            val inst = instance
+            if (inst == null) {
+                return Pair(false, "मास्टर, ऑटो स्क्रॉल के लिए एक्सेसिबिलिटी सर्विस सक्षम करें।")
+            }
+            autoScrollJob?.cancel()
+            return if (enable) {
+                autoScrollJob = CoroutineScope(Dispatchers.Main).launch {
+                    while (isActive) {
+                        delay(12000L) // Wait 12 seconds per reel
+                        inst.scrollDown()
+                    }
+                }
+                Pair(true, "ऑटो रील स्क्रॉल चालू कर दिया गया है। हर 12 सेकंड में अगली रील चलेगी।")
+            } else {
+                autoScrollJob = null
+                Pair(true, "ऑटो रील स्क्रॉल बंद कर दिया गया है।")
+            }
+        }
 
         fun isAccessibilitySettingsEnabled(context: Context): Boolean {
             val expectedServiceName = "${context.packageName}/${SnehaAccessibilityService::class.java.canonicalName}"

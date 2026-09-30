@@ -56,7 +56,10 @@ class ExampleUnitTest {
     @Test
     fun testVoicePersona_allPersonasAndDefaults() {
         val personas = com.example.data.model.VoicePersona.ALL
-        assertEquals(5, personas.size)
+        assertEquals(6, personas.size)
+
+        val gf = com.example.data.model.VoicePersona.fromId("girlfriend")
+        assertEquals(com.example.data.model.VoicePersonaId.GIRLFRIEND, gf.id)
 
         val classic = com.example.data.model.VoicePersona.fromId("classic")
         assertEquals(com.example.data.model.VoicePersonaId.CLASSIC, classic.id)
